@@ -1737,6 +1737,20 @@ const RISCVExplorer = () => {
       // Vector GCM/GMAC
       'VGHSH.VV', 'VGMUL.VV',
     ],
+    Zvkn: [
+      // Vector NIST suite (AES + SHA + bitmanip)
+      'VAESDF.VS', 'VAESDF.VV',
+      'VAESDM.VS', 'VAESDM.VV',
+      'VAESEF.VS', 'VAESEF.VV',
+      'VAESEM.VS', 'VAESEM.VV',
+      'VAESKF1.VI', 'VAESKF2.VI',
+      'VAESZ.VS',
+      'VANDN.VV', 'VANDN.VX',
+      'VBREV8.V', 'VREV8.V',
+      'VROL.VV', 'VROL.VX',
+      'VROR.VI', 'VROR.VV', 'VROR.VX',
+      'VSHA2CH.VV', 'VSHA2CL.VV', 'VSHA2MS.VV',
+    ],
     Zvkned: [
       // Vector AES
       'VAESDF.VV', 'VAESDF.VS',
@@ -1753,6 +1767,15 @@ const RISCVExplorer = () => {
     Zvknhb: [
       // Vector SHA-256/512
       'VSHA2MS.VV', 'VSHA2CH.VV', 'VSHA2CL.VV',
+    ],
+    Zvks: [
+      // Vector ShangMi suite (SM4 + SM3 + bitmanip)
+      'VANDN.VV', 'VANDN.VX',
+      'VBREV8.V', 'VREV8.V',
+      'VROL.VV', 'VROL.VX',
+      'VROR.VI', 'VROR.VV', 'VROR.VX',
+      'VSM3C.VI', 'VSM3ME.VV',
+      'VSM4K.VI', 'VSM4R.VS', 'VSM4R.VV',
     ],
     Zvksed: [
       // Vector SM4
