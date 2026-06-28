@@ -1,0 +1,227 @@
+{
+  "_meta": {
+    "description": "Tracks opcode tags present in src/instr_dict.json that are not yet claimed by any catalog entry in src/riscv_extensions.json. Each entry explains why the tag is unmapped and what action is needed.",
+    "source_of_truth": "src/instr_dict.json",
+    "catalog": "src/riscv_extensions.json",
+    "generated_after_pr": 127,
+    "total_tags_in_instr_dict": 114,
+    "tags_mapped_by_pr_127": 100,
+    "unmapped_count": 14
+  },
+  "gaps": [
+    {
+      "tag": "rv_zicbo",
+      "instructions": [
+        "cbo_clean",
+        "cbo_flush",
+        "cbo_inval",
+        "cbo_zero"
+      ],
+      "instruction_count": 4,
+      "category": "split_tag",
+      "reason": "All 4 cache block operation instructions share the same upstream tag rv_zicbo, but the catalog has three distinct entries: Zicbom (cbo_clean, cbo_flush, cbo_inval), Zicbop (prefetch hint, no opcode in instr_dict), and Zicboz (cbo_zero). A single tag cannot be claimed by one entry without incorrectly routing instructions from the others. Requires split routing logic in the sync script.",
+      "catalog_entries_affected": [
+        "Zicbom",
+        "Zicbop",
+        "Zicboz"
+      ],
+      "action_required": "Add rv_zicbo to tags on all three Zicbo* entries, then implement a SPLIT_RULES map in sync_instructions.mjs: cbo_clean/cbo_flush/cbo_inval -> Zicbom, cbo_zero -> Zicboz. Zicbop has no opcodes in instr_dict (it is a pure microarchitectural hint extension)."
+    },
+    {
+      "tag": "rv_system",
+      "instructions": [
+        "mret",
+        "wfi"
+      ],
+      "instruction_count": 2,
+      "category": "no_catalog_entry",
+      "reason": "mret (Machine Return) and wfi (Wait For Interrupt) are privileged-mode instructions. upstream riscv-opcodes groups them under the rv_system tag. The catalog currently has no dedicated entry for the Machine-mode privileged ISA (M-mode) that would own this tag. These instructions are not part of the unprivileged ISA and no existing extension entry maps to rv_system.",
+      "catalog_entries_affected": [],
+      "action_required": "Decision required: either add a Machine-mode privileged extension entry to the catalog (e.g., 'Priv-M') and assign rv_system to its tags, or explicitly exclude this tag as out-of-scope for the Landscape visualizer. Recommend consulting mentor on scope."
+    },
+    {
+      "tag": "rv_zbp",
+      "instructions": [
+        "xperm16"
+      ],
+      "instruction_count": 1,
+      "category": "unratified_draft",
+      "reason": "Zbp (Bit Manipulation Permutation) was part of the original Bitmanip draft proposal. It was never ratified by RISC-V International. The ratified Bitmanip set only includes Zba, Zbb, Zbc, and Zbs. Zbp was abandoned and removed from toolchains (LLVM/GCC). The catalog has no Zbp entry because it is not a ratified or active extension.",
+      "catalog_entries_affected": [],
+      "action_required": "Add a Zbp catalog entry with tags [rv_zbp, rv64_zbp] and mark it as unratified/historical in its desc field. This is useful for the Landscape as historical context. Alternatively, document it in this file as permanently excluded if the project scope is ratified extensions only."
+    },
+    {
+      "tag": "rv64_zbp",
+      "instructions": [
+        "gorci",
+        "grevi",
+        "shfli",
+        "unshfli",
+        "xperm32"
+      ],
+      "instruction_count": 5,
+      "category": "unratified_draft",
+      "reason": "RV64-specific subset of the unratified Zbp extension. Same status as rv_zbp — never ratified, removed from active toolchains. Both rv_zbp and rv64_zbp should be resolved together under a single Zbp catalog entry.",
+      "catalog_entries_affected": [],
+      "action_required": "Resolve together with rv_zbp. A single Zbp entry with tags [rv_zbp, rv64_zbp] covers both."
+    },
+    {
+      "tag": "rv_zvfbdot32f",
+      "instructions": [
+        "vfbdot_vv"
+      ],
+      "instruction_count": 1,
+      "category": "no_catalog_entry",
+      "reason": "Corresponds to a vector BF16/FP32 dot-product extension currently in fast-track proposal. The tag exists in instr_dict.json but the catalog has no matching Zvfbdot32f (or equivalent named) entry. The nearest catalog entry is Zvfbfwma which covers a different BF16 operation.",
+      "catalog_entries_affected": [],
+      "action_required": "Add a Zvfbdot32f catalog entry (or equivalent canonical name once spec stabilizes) and assign tag rv_zvfbdot32f. Verify canonical extension name against the latest RISC-V fast-track spec before adding."
+    },
+    {
+      "tag": "rv_zvfofp4min",
+      "instructions": [
+        "vfext_vf2"
+      ],
+      "instruction_count": 1,
+      "category": "no_catalog_entry",
+      "reason": "Corresponds to a vector FP8/FP4 extension. The catalog has Zvfofp8min (with tag rv_zvfofp8min) but no Zvfofp4min entry for the FP4 variant. The upstream instr_dict contains the FP4 instruction but the catalog was not extended to include it.",
+      "catalog_entries_affected": [],
+      "action_required": "Add a Zvfofp4min catalog entry with tag rv_zvfofp4min to match the existing Zvfofp8min pattern already in the catalog."
+    },
+    {
+      "tag": "rv_zvfqbdot8f",
+      "instructions": [
+        "vfqbdot_alt_vv",
+        "vfqbdot_vv"
+      ],
+      "instruction_count": 2,
+      "category": "no_catalog_entry",
+      "reason": "Corresponds to a vector FP8 quantized dot-product extension in fast-track proposal. No catalog entry exists for Zvfqbdot8f or equivalent.",
+      "catalog_entries_affected": [],
+      "action_required": "Add catalog entry once the canonical extension name is confirmed in the RISC-V spec. Assign tag rv_zvfqbdot8f."
+    },
+    {
+      "tag": "rv_zvfqldot8f",
+      "instructions": [
+        "vfqldot_alt_vv",
+        "vfqldot_vv"
+      ],
+      "instruction_count": 2,
+      "category": "no_catalog_entry",
+      "reason": "Corresponds to a vector FP8 quantized log dot-product extension in fast-track proposal. No catalog entry exists for Zvfqldot8f or equivalent.",
+      "catalog_entries_affected": [],
+      "action_required": "Add catalog entry once canonical name is confirmed. Assign tag rv_zvfqldot8f."
+    },
+    {
+      "tag": "rv_zvfwbdot16bf",
+      "instructions": [
+        "vfwbdot_vv"
+      ],
+      "instruction_count": 1,
+      "category": "no_catalog_entry",
+      "reason": "Corresponds to a vector widening BF16 dot-product extension in fast-track proposal. No catalog entry exists for Zvfwbdot16bf.",
+      "catalog_entries_affected": [],
+      "action_required": "Add catalog entry once canonical name is confirmed. Assign tag rv_zvfwbdot16bf."
+    },
+    {
+      "tag": "rv_zvfwldot16bf",
+      "instructions": [
+        "vfwldot_vv"
+      ],
+      "instruction_count": 1,
+      "category": "no_catalog_entry",
+      "reason": "Corresponds to a vector widening BF16 log dot-product extension in fast-track proposal. No catalog entry exists for Zvfwldot16bf.",
+      "catalog_entries_affected": [],
+      "action_required": "Add catalog entry once canonical name is confirmed. Assign tag rv_zvfwldot16bf."
+    },
+    {
+      "tag": "rv_zvqbdot8i",
+      "instructions": [
+        "vqbdots_vv",
+        "vqbdotu_vv"
+      ],
+      "instruction_count": 2,
+      "category": "no_catalog_entry",
+      "reason": "Corresponds to a vector INT8 quantized block dot-product extension. The ARC has been consolidating dot-product naming (Zvqdotq -> Zvdot4a etc.). No catalog entry exists for this tag. Canonical extension name may still be in flux.",
+      "catalog_entries_affected": [],
+      "action_required": "Hold until the ARC-consolidated extension name is finalized. Then add catalog entry with correct canonical name and this tag."
+    },
+    {
+      "tag": "rv_zvqdotq",
+      "instructions": [
+        "vqdot_vv",
+        "vqdot_vx",
+        "vqdotsu_vv",
+        "vqdotsu_vx",
+        "vqdotu_vv",
+        "vqdotu_vx",
+        "vqdotus_vx"
+      ],
+      "instruction_count": 7,
+      "category": "no_catalog_entry",
+      "reason": "The Zvqdotq extension (INT8 quantized dot-product) is in the RISC-V fast-track process. ARC recommended renaming to Zvdot4a in late 2025. The catalog has Zvbdota but not Zvqdotq or Zvdot4a. No catalog entry currently maps this tag.",
+      "catalog_entries_affected": [],
+      "action_required": "Confirm final canonical name (Zvqdotq vs Zvdot4a) with the RISC-V spec. Add catalog entry accordingly. This is the largest unmapped tag by instruction count (7 instructions)."
+    },
+    {
+      "tag": "rv_zvqldot8i",
+      "instructions": [
+        "vqldots_vv",
+        "vqldotu_vv"
+      ],
+      "instruction_count": 2,
+      "category": "no_catalog_entry",
+      "reason": "Corresponds to a vector INT8 quantized log dot-product extension. Same fast-track/naming-flux situation as rv_zvqbdot8i. No catalog entry exists.",
+      "catalog_entries_affected": [],
+      "action_required": "Hold until ARC-consolidated naming is stable. Then add catalog entry."
+    },
+    {
+      "tag": "rv_zvzip",
+      "instructions": [
+        "vpaire_vv",
+        "vpairo_vv",
+        "vunzipe_v",
+        "vunzipo_v",
+        "vzip_vv"
+      ],
+      "instruction_count": 5,
+      "category": "no_catalog_entry",
+      "reason": "Zvzip (Vector Element Reordering) originated as a vendor extension (XRivosVizip) and is moving through RISC-V fast-track. LLVM support is being tracked in parallel with the spec. The catalog has no Zvzip entry. Spec and mnemonic names are still being finalized as of early 2026.",
+      "catalog_entries_affected": [],
+      "action_required": "Add Zvzip catalog entry once spec is stable. Assign tag rv_zvzip. Monitor LLVM/GCC support PRs for canonical mnemonic confirmation."
+    }
+  ],
+  "category_summary": {
+    "split_tag": {
+      "count": 1,
+      "description": "One instr_dict tag shared by multiple catalog entries — requires split routing logic in sync_instructions.mjs",
+      "tags": [
+        "rv_zicbo"
+      ]
+    },
+    "no_catalog_entry": {
+      "count": 11,
+      "description": "New or draft extensions present in instr_dict but not yet added to the catalog",
+      "tags": [
+        "rv_system",
+        "rv_zvfbdot32f",
+        "rv_zvfofp4min",
+        "rv_zvfqbdot8f",
+        "rv_zvfqldot8f",
+        "rv_zvfwbdot16bf",
+        "rv_zvfwldot16bf",
+        "rv_zvqbdot8i",
+        "rv_zvqdotq",
+        "rv_zvqldot8i",
+        "rv_zvzip"
+      ]
+    },
+    "unratified_draft": {
+      "count": 2,
+      "description": "Tags for extensions that were proposed but never ratified by RISC-V International",
+      "tags": [
+        "rv_zbp",
+        "rv64_zbp"
+      ]
+    }
+  }
+}
