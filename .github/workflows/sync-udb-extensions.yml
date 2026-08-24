@@ -55,6 +55,9 @@ jobs:
       - name: Reseed the dependency graph
         run: node scripts/seed-dependency-graph.mjs --udb ../riscv-unified-db
 
+      - name: Build
+        run: npm run build
+
       - name: Validate the result
         run: npm test
 
