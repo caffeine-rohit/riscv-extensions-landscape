@@ -32,11 +32,13 @@ const baseProps = (over = {}) => ({
   selectedExtId: null,
   workspaceIds: new Set(),
   lockedExtensions: new Map(),
+  compareIds: new Set(),
   builderMode: false,
   isHighlighted: () => false,
   isDimmed: () => false,
   onSelect: () => {},
   onToggleWorkspace: () => {},
+  onToggleCompare: () => {},
   ...over,
 });
 
@@ -125,4 +127,50 @@ test('no component is declared inside another component', () => {
     'components must live at module scope, or React remounts their subtree every render:\n  '
       + offenders.join('\n  '),
   );
+});
+
+test('EncodingDiagram lives in its own module, not in the visualizer', () => {
+  // It has two consumers now — the instruction detail panel and the comparison
+  // view. A component defined inside one consumer's file is not shared, it is
+  // borrowed. Same reasoning that moved the tile out.
+  const visualizer = fs.readFileSync(path.join(srcDir, 'risc_v_visualizer.jsx'), 'utf8');
+  assert.ok(
+    !/^const EncodingDiagram = /m.test(visualizer),
+    'EncodingDiagram is still declared inside risc_v_visualizer.jsx',
+  );
+  assert.ok(
+    /import EncodingDiagram from '\.\/EncodingDiagram\.jsx'/.test(visualizer),
+    'risc_v_visualizer.jsx should import EncodingDiagram',
+  );
+
+  const diagram = fs.readFileSync(path.join(srcDir, 'EncodingDiagram.jsx'), 'utf8');
+  assert.ok(/export default function EncodingDiagram/.test(diagram), 'no default export');
+  assert.ok(/diffMask/.test(diagram), 'the diff mask prop is missing');
+});
+
+test('a new compareIds Set with the same membership still skips', () => {
+  // Same reasoning as workspaceIds: the Set is rebuilt on every pin, so an
+  // identity compare would re-render all 227 tiles each time one is pinned.
+  const prev = baseProps({ compareIds: new Set(['Zba', 'Zbb']) });
+  const next = baseProps({ ...prev, compareIds: new Set(['Zba', 'Zbb']) });
+  assert.notEqual(prev.compareIds, next.compareIds, 'the Sets must be different objects');
+  assert.equal(tilePropsAreEqual(prev, next), true);
+});
+
+test('a tile re-renders when its own compare membership changes', () => {
+  const prev = baseProps({ compareIds: new Set() });
+  const next = baseProps({ ...prev, compareIds: new Set(['Zfa']) });
+  assert.equal(tilePropsAreEqual(prev, next), false);
+});
+
+test('pinning a different extension does not re-render this tile', () => {
+  const prev = baseProps({ compareIds: new Set() });
+  const next = baseProps({ ...prev, compareIds: new Set(['Zba']) });
+  assert.equal(tilePropsAreEqual(prev, next), true, 'baseProps is Zfa, so Zba is none of its business');
+});
+
+test('an unstable onToggleCompare re-renders, which is why it must be memoised', () => {
+  const prev = baseProps();
+  const next = baseProps({ ...prev, onToggleCompare: () => {} });
+  assert.equal(tilePropsAreEqual(prev, next), false);
 });

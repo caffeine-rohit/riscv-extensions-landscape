@@ -8,8 +8,6 @@ import {
   Copy,
   Grid3x3,
   Link2,
-  ChevronLeft,
-  ChevronRight,
   Search,
   Cpu,
   Shield,
@@ -20,6 +18,9 @@ import {
   Layers,
   Braces,
   FlaskConical,
+  PanelRightOpen,
+  Bug,
+  ExternalLink,
   Network,
   Activity,
   BookOpen,
@@ -37,14 +38,28 @@ import {
   KeyRound,
   Trash2,
   Download,
-  Maximize2,
   Sun,
   Moon,
+  Columns,
 } from 'lucide-react';
 import extensions from './riscv_extensions.json';
 import EncodingMap from './EncodingMap.jsx';
 import WorkspacePanel from './WorkspacePanel.jsx';
 import ExtensionTile from './ExtensionTile.jsx';
+import EncodingDiagram from './EncodingDiagram.jsx';
+import CompareTray from './CompareTray.jsx';
+import CompareView from './CompareView.jsx';
+import {
+  COMPARE_MAX,
+  COMPARE_PARAM,
+  instructionKey,
+  parseInstructionKey,
+  buildExtensionComparison,
+  buildInstructionComparison,
+  buildProfileComparison,
+  buildComparePermalink,
+  parseComparePermalink,
+} from './compareModel.js';
 // INCOMPATIBLE_WITH is no longer imported here: conflicts now come back from
 // resolveSelection(), which checks them over the resolved closure rather than
 // only over what the user clicked.
@@ -461,273 +476,6 @@ const overlapExampleWord = (aMatch, aMask, bMatch, bMask) => {
   return ((am & ak) | (bm & (bk & ~ak))) & BIT_MASK_32;
 };
 
-const EncodingDiagram = ({ encoding }) => {
-  const scrollRef = React.useRef(null);
-  const rafRef = React.useRef(null);
-  const dragRef = React.useRef(null);
-  const [scrollState, setScrollState] = React.useState({
-    scrollLeft: 0,
-    scrollWidth: 0,
-    clientWidth: 0,
-  });
-
-  const normalized = String(encoding || '').replace(/\s+/g, '');
-  if (normalized.length !== 32) {
-    return (
-      <div
-        className="font-mono text-[12px] bg-[var(--riscv-surface-2)] border border-[var(--riscv-border-2)] rounded px-2 py-1 break-all"
-        style={{ color: 'var(--riscv-text-2)' }}
-      >
-        {encoding}
-      </div>
-    );
-  }
-
-  // RISC-V standard R-type field ranges (bit index from MSB=0):
-  // bit 31..25 → funct7 (i=0..6)
-  // bit 24..20 → rs2    (i=7..11)
-  // bit 19..15 → rs1    (i=12..16)
-  // bit 14..12 → funct3 (i=17..19)
-  // bit 11..7  → rd     (i=20..24)
-  // bit 6..0   → opcode (i=25..31)
-  const getFieldClass = (i, isVar) => {
-    if (isVar) return 'enc-var';
-    if (i <= 6) return 'enc-funct7';
-    if (i <= 11) return 'enc-rs2';
-    if (i <= 16) return 'enc-rs1';
-    if (i <= 19) return 'enc-funct3';
-    if (i <= 24) return 'enc-rd';
-    return 'enc-opcode';
-  };
-
-  const getFieldName = (i) => {
-    if (i <= 6) return 'funct7';
-    if (i <= 11) return 'rs2';
-    if (i <= 16) return 'rs1';
-    if (i <= 19) return 'funct3';
-    if (i <= 24) return 'rd';
-    return 'opcode';
-  };
-
-  // Build field label spans for the legend row
-  const FIELD_LABELS = [
-    { name: 'funct7', from: 0, to: 6, cls: 'enc-funct7' },
-    { name: 'rs2', from: 7, to: 11, cls: 'enc-rs2' },
-    { name: 'rs1', from: 12, to: 16, cls: 'enc-rs1' },
-    { name: 'funct3', from: 17, to: 19, cls: 'enc-funct3' },
-    { name: 'rd', from: 20, to: 24, cls: 'enc-rd' },
-    { name: 'opcode', from: 25, to: 31, cls: 'enc-opcode' },
-  ];
-
-  const updateScrollState = React.useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    setScrollState((prev) => {
-      const next = {
-        scrollLeft: el.scrollLeft,
-        scrollWidth: el.scrollWidth,
-        clientWidth: el.clientWidth,
-      };
-      if (
-        prev.scrollLeft === next.scrollLeft &&
-        prev.scrollWidth === next.scrollWidth &&
-        prev.clientWidth === next.clientWidth
-      ) {
-        return prev;
-      }
-      return next;
-    });
-  }, []);
-
-  React.useEffect(() => {
-    updateScrollState();
-    const el = scrollRef.current;
-    if (!el) return;
-
-    const onScroll = () => {
-      if (rafRef.current) return;
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = null;
-        updateScrollState();
-      });
-    };
-    el.addEventListener('scroll', onScroll, { passive: true });
-
-    const onResize = () => updateScrollState();
-    window.addEventListener('resize', onResize);
-
-    return () => {
-      el.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onResize);
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    };
-  }, [updateScrollState, normalized]);
-
-  const maxScrollLeft = Math.max(0, scrollState.scrollWidth - scrollState.clientWidth);
-  const canScroll = maxScrollLeft > 0;
-  const atLeft = scrollState.scrollLeft <= 0;
-  const atRight = scrollState.scrollLeft >= maxScrollLeft - 1;
-  const scrollProgress = canScroll ? scrollState.scrollLeft / maxScrollLeft : 0;
-  const thumbRatio = canScroll ? Math.min(1, scrollState.clientWidth / scrollState.scrollWidth) : 1;
-  const thumbLeftPct = (1 - thumbRatio) * scrollProgress * 100;
-  const thumbWidthPct = thumbRatio * 100;
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <div
-          className="flex items-center gap-2 text-[11px] uppercase tracking-wider font-semibold"
-          style={{ color: 'var(--riscv-text-3)' }}
-        >
-          <Binary size={11} />
-          <span>Bit Fields</span>
-          {canScroll && (
-            <span
-              className="inline-flex items-center gap-1 normal-case tracking-normal"
-              style={{ color: 'var(--riscv-gold)' }}
-            >
-              scroll <ArrowRight size={11} />
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            className="riscv-btn p-1 disabled:opacity-30"
-            onClick={() => scrollRef.current?.scrollBy({ left: -220, behavior: 'smooth' })}
-            disabled={!canScroll || atLeft}
-            data-tooltip="Scroll left"
-            aria-label="Scroll left"
-          >
-            <ChevronLeft size={13} />
-          </button>
-          <button
-            type="button"
-            className="riscv-btn p-1 disabled:opacity-30"
-            onClick={() => scrollRef.current?.scrollBy({ left: 220, behavior: 'smooth' })}
-            disabled={!canScroll || atRight}
-            data-tooltip="Scroll right"
-            aria-label="Scroll right"
-          >
-            <ChevronRight size={13} />
-          </button>
-        </div>
-      </div>
-
-      <div ref={scrollRef} className="overflow-x-auto">
-        <div className="inline-block pr-2">
-          {/* Bit cells */}
-          <div className="inline-grid grid-flow-col auto-cols-[20px] rounded-md border border-[var(--riscv-border-2)] overflow-hidden">
-            {normalized.split('').map((bit, i) => {
-              const isVar = bit === '-';
-              const isGroupEnd = (i + 1) % 4 === 0 && i !== 31;
-              const value = isVar ? 'x' : bit;
-              const fieldCls = getFieldClass(i, isVar);
-              const fieldName = getFieldName(i);
-              return (
-                <div
-                  key={`${i}-${bit}`}
-                  className={[
-                    'h-7 flex items-center justify-center font-mono text-[12px] font-medium border-r',
-                    fieldCls,
-                    i === 31 ? 'border-r-0' : isGroupEnd ? 'border-r-2' : '',
-                  ].join(' ')}
-                  data-tooltip={`bit[${31 - i}] — ${fieldName}`}
-                >
-                  {value}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Bit number labels */}
-          <div
-            className="mt-1 flex justify-between text-[10px] font-mono px-0.5"
-            style={{ color: 'var(--riscv-text-3)' }}
-          >
-            <span>31</span>
-            <span>0</span>
-          </div>
-
-          {/* Field legend row */}
-          <div className="mt-2 flex gap-1.5 flex-wrap">
-            {FIELD_LABELS.map(({ name, cls }) => (
-              <span
-                key={name}
-                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border ${cls}`}
-              >
-                {name}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {canScroll && (
-        <div
-          className="mt-2 h-1.5 rounded-full relative cursor-pointer"
-          style={{ background: 'var(--riscv-border)', border: '1px solid var(--riscv-border-2)' }}
-          onClick={(e) => {
-            const el = scrollRef.current;
-            if (!el) return;
-            const rect = e.currentTarget.getBoundingClientRect();
-            const x = Math.min(Math.max(0, e.clientX - rect.left), rect.width);
-            const next = (x / rect.width) * maxScrollLeft;
-            el.scrollTo({ left: next, behavior: 'smooth' });
-          }}
-          role="presentation"
-          data-tooltip="Click to scroll"
-        >
-          <div
-            className="absolute top-0 bottom-0 rounded-full cursor-grab active:cursor-grabbing"
-            style={{
-              left: `${thumbLeftPct}%`,
-              width: `${thumbWidthPct}%`,
-              background: 'var(--riscv-gold)',
-              opacity: 0.5,
-            }}
-            onPointerDown={(e) => {
-              const el = scrollRef.current;
-              if (!el) return;
-              e.stopPropagation();
-              const track = e.currentTarget.parentElement;
-              if (!track) return;
-              const trackRect = track.getBoundingClientRect();
-              dragRef.current = {
-                pointerId: e.pointerId,
-                startX: e.clientX,
-                startScrollLeft: el.scrollLeft,
-                trackWidth: trackRect.width,
-              };
-              e.currentTarget.setPointerCapture(e.pointerId);
-            }}
-            onPointerMove={(e) => {
-              const el = scrollRef.current;
-              const drag = dragRef.current;
-              if (!el || !drag || drag.pointerId !== e.pointerId) return;
-              const dx = e.clientX - drag.startX;
-              const delta = (dx / drag.trackWidth) * maxScrollLeft;
-              el.scrollLeft = Math.min(maxScrollLeft, Math.max(0, drag.startScrollLeft + delta));
-            }}
-            onPointerUp={(e) => {
-              const drag = dragRef.current;
-              if (!drag || drag.pointerId !== e.pointerId) return;
-              dragRef.current = null;
-              try {
-                e.currentTarget.releasePointerCapture(e.pointerId);
-              } catch {
-                // no-op
-              }
-            }}
-          />
-        </div>
-      )}
-    </div>
-  );
-};
-
 const extensionCsrLabels = {
   S: 'Supervisor CSRs',
   U: 'User CSRs',
@@ -763,6 +511,53 @@ const RISCVExplorer = () => {
     setWorkspaceNotice(msg);
     toastTimerRef.current = setTimeout(() => setWorkspaceNotice(null), 3500);
   }, []);
+
+  // Comparison. Two sets, because extensions and instructions are compared
+  // separately and pinning one kind must not discard the other.
+  const comparePermalinkSeed = React.useMemo(() => {
+    if (typeof window === 'undefined')
+      return { kind: null, resolved: [], dropped: [], overflow: [] };
+    const value = new URL(window.location.href).searchParams.get(COMPARE_PARAM);
+    return parseComparePermalink(value, allExtensionsFlat);
+  }, []);
+
+  const [compareExtIds, setCompareExtIds] = useState(
+    () => new Set(comparePermalinkSeed.kind === 'ext' ? comparePermalinkSeed.resolved : []),
+  );
+  const [compareInstrKeys, setCompareInstrKeys] = useState(
+    () => new Set(comparePermalinkSeed.kind === 'instr' ? comparePermalinkSeed.resolved : []),
+  );
+  const [compareKind, setCompareKind] = useState(comparePermalinkSeed.kind || 'ext');
+  // Compare mode keeps the pin affordances out of the way until asked for.
+  // A shared ?cmp= link switches it on at mount, so a comparison someone sent
+  // still opens for a reader who has never turned the mode on themselves.
+  const [compareMode, setCompareMode] = useState(comparePermalinkSeed.resolved.length > 0);
+  const [compareProfileNames, setCompareProfileNames] = useState(
+    () => new Set(comparePermalinkSeed.kind === 'profile' ? comparePermalinkSeed.resolved : []),
+  );
+  const [compareExpandDeps, setCompareExpandDeps] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(comparePermalinkSeed.resolved.length >= 2);
+
+  // A shared comparison outlives the catalog it was made from. Unresolvable
+  // ids and ids merely over the cap are different facts and must be reported
+  // separately — conflating them tells the user a real extension "is not in
+  // the catalog" when it was only bumped by COMPARE_MAX.
+  React.useEffect(() => {
+    const { dropped, overflow } = comparePermalinkSeed;
+    if (dropped.length === 0 && overflow.length === 0) return;
+    // showToast displays one message at a time, so when both facts are true
+    // they are joined into a single toast rather than the second call
+    // silently clobbering the first.
+    const messages = [];
+    if (dropped.length > 0) {
+      messages.push(`Not in the catalog, left out of the comparison: ${dropped.join(', ')}`);
+    }
+    if (overflow.length > 0) {
+      messages.push(`Comparison holds ${COMPARE_MAX} at most, left out: ${overflow.join(', ')}`);
+    }
+    showToast(messages.join(' '));
+  }, [comparePermalinkSeed, showToast]);
+
   // Builder mode. The per-tile "+" affordances only exist while this is on.
   // Previously they were always rendered, in a low-contrast grey, with nothing
   // explaining what they did — a permanent control for a mode the user had not
@@ -1607,30 +1402,194 @@ const RISCVExplorer = () => {
     });
   }, []);
 
+  const toggleCompareExt = React.useCallback(
+    (id) => {
+      setCompareExtIds((current) => {
+        const next = new Set(current);
+        if (next.has(id)) {
+          next.delete(id);
+          return next;
+        }
+        if (next.size >= COMPARE_MAX) {
+          showToast(`Comparison holds ${COMPARE_MAX} extensions at most`);
+          return current;
+        }
+        next.add(id);
+        return next;
+      });
+      setCompareKind('ext');
+    },
+    [showToast],
+  );
+
+  const toggleCompareInstruction = React.useCallback(
+    (extId, mnemonic) => {
+      const key = instructionKey(extId, mnemonic);
+      setCompareInstrKeys((current) => {
+        const next = new Set(current);
+        if (next.has(key)) {
+          next.delete(key);
+          return next;
+        }
+        if (next.size >= COMPARE_MAX) {
+          showToast(`Comparison holds ${COMPARE_MAX} instructions at most`);
+          return current;
+        }
+        next.add(key);
+        return next;
+      });
+      setCompareKind('instr');
+    },
+    [showToast],
+  );
+
+  const toggleCompareProfile = React.useCallback(
+    (name) => {
+      setCompareProfileNames((current) => {
+        const next = new Set(current);
+        if (next.has(name)) {
+          next.delete(name);
+          return next;
+        }
+        if (next.size >= COMPARE_MAX) {
+          showToast(`Comparison holds ${COMPARE_MAX} profiles at most`);
+          return current;
+        }
+        next.add(name);
+        return next;
+      });
+      setCompareKind('profile');
+    },
+    [showToast],
+  );
+
+  const removeCompareItem = React.useCallback((kind, key) => {
+    // Chosen inline rather than from a lookup object: a lookup declared in the
+    // render body would be a fresh object each render, captured stale by this
+    // empty-dependency callback.
+    const setter =
+      kind === 'instr'
+        ? setCompareInstrKeys
+        : kind === 'profile'
+          ? setCompareProfileNames
+          : setCompareExtIds;
+    setter((current) => {
+      const next = new Set(current);
+      next.delete(key);
+      return next;
+    });
+  }, []);
+
+  const clearCompare = React.useCallback((kind) => {
+    if (kind === 'instr') setCompareInstrKeys(new Set());
+    else if (kind === 'profile') setCompareProfileNames(new Set());
+    else setCompareExtIds(new Set());
+  }, []);
+
+  // Stable identities for CompareTray/CompareView, rather than inline arrows
+  // at the JSX call site. CompareView's focus effect depends on `onClose`;
+  // an inline arrow is a new function every render, so any re-render while
+  // the dialog is open (e.g. the toast auto-clearing) would re-run that
+  // effect and steal focus back to the dialog container. CompareView also
+  // holds onClose in a ref for the same reason, so it stays correct even if
+  // a future caller passes an inline handler again.
+  const openCompareView = React.useCallback(() => setCompareOpen(true), []);
+  const closeCompareView = React.useCallback(() => setCompareOpen(false), []);
+
   const tileProps = React.useMemo(
     () => ({
       searchQuery,
       selectedExtId: selectedExt?.id ?? null,
       workspaceIds,
       lockedExtensions,
+      compareIds: compareExtIds,
+      compareMode,
       builderMode,
       isHighlighted,
       isDimmed,
       onSelect: handleSelectExt,
       onToggleWorkspace: handleToggleWorkspace,
+      onToggleCompare: toggleCompareExt,
     }),
     [
       searchQuery,
       selectedExt,
       workspaceIds,
       lockedExtensions,
+      compareExtIds,
+      compareMode,
       builderMode,
       isHighlighted,
       isDimmed,
       handleSelectExt,
       handleToggleWorkspace,
+      toggleCompareExt,
     ],
   );
+
+  const comparePinnedTotal = compareExtIds.size + compareInstrKeys.size + compareProfileNames.size;
+
+  const compareKeys = React.useMemo(() => {
+    if (compareKind === 'instr') return [...compareInstrKeys];
+    if (compareKind === 'profile') return [...compareProfileNames];
+    return [...compareExtIds];
+  }, [compareKind, compareInstrKeys, compareProfileNames, compareExtIds]);
+
+  const compareModel = React.useMemo(() => {
+    if (compareKeys.length === 0) return null;
+    if (compareKind === 'profile') {
+      return buildProfileComparison(compareKeys, { expandDependencies: compareExpandDeps });
+    }
+    if (compareKind === 'ext') {
+      return buildExtensionComparison(
+        compareKeys.map((id) => findExtensionById(id)).filter(Boolean),
+      );
+    }
+    return buildInstructionComparison(
+      compareKeys
+        .map((key) => {
+          const parsed = parseInstructionKey(key);
+          const ext = parsed && findExtensionById(parsed.extId);
+          const instr = ext && ext.instructions?.[parsed.mnemonic];
+          return instr ? { extId: ext.id, mnemonic: parsed.mnemonic, instr } : null;
+        })
+        .filter(Boolean),
+    );
+  }, [compareKind, compareKeys, compareExpandDeps]);
+
+  // Mirrors the existing `ext` permalink effect: replaceState, never push, so
+  // pinning does not fill the back button with intermediate states.
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    const current = url.searchParams.get(COMPARE_PARAM);
+    const next = buildComparePermalink(compareKind, compareKeys);
+    if ((current || '') === next) return;
+    if (next) url.searchParams.set(COMPARE_PARAM, next);
+    else url.searchParams.delete(COMPARE_PARAM);
+    window.history.replaceState(null, '', url.toString());
+  }, [compareKind, compareKeys]);
+
+  const copyCompareMarkdown = React.useCallback(
+    async (markdown) => {
+      const ok = await copyTextToClipboard(markdown);
+      showToast(ok ? 'Comparison copied as Markdown' : 'Could not copy to the clipboard');
+    },
+    [copyTextToClipboard, showToast],
+  );
+
+  const copyCompareLink = React.useCallback(async () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set(COMPARE_PARAM, buildComparePermalink(compareKind, compareKeys));
+    const ok = await copyTextToClipboard(url.toString());
+    showToast(ok ? 'Comparison link copied' : 'Could not copy to the clipboard');
+  }, [compareKind, compareKeys, copyTextToClipboard, showToast]);
+
+  // Unpinning down to one item leaves nothing to compare. Closing beats showing
+  // a single column and calling it a comparison.
+  React.useEffect(() => {
+    if (compareOpen && compareKeys.length < 2) setCompareOpen(false);
+  }, [compareOpen, compareKeys]);
 
   // Calculate if search has any matching extensions
   const hasSearchMatches = React.useMemo(() => {
@@ -1771,9 +1730,13 @@ const RISCVExplorer = () => {
             style={{ borderBottom: '1px solid var(--riscv-border)' }}
           >
             {/* Title row */}
-            <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-3 mb-1">
+            <div className="flex flex-col gap-4">
+              {/* Identity row. Title left, counts right, one line. The tagline
+                  that used to sit under the title said what the title says, and
+                  the counts are orientation rather than a dashboard — neither
+                  earned a line of its own above the grid. */}
+              <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
+                <div className="flex items-center gap-3">
                   <CircuitBoard size={22} style={{ color: 'var(--riscv-gold)' }} />
                   <h1
                     className="text-2xl md:text-3xl font-black tracking-tight"
@@ -1785,36 +1748,57 @@ const RISCVExplorer = () => {
                     }}
                   >
                     RISC-V Extension Landscape
+                    {/* Rides the title like an exponent. Inside the h1 on
+                        purpose, so it tracks the title's last letter at any
+                        size instead of being positioned against a width that
+                        changes with the viewport. The h1 paints its text with
+                        a clipped gradient and a transparent fill, which a
+                        child inherits — so the class re-declares
+                        -webkit-text-fill-color or this would render invisible. */}
+                    <sup
+                      className="riscv-preview-sup"
+                      title="This site is a technical preview — verify anything load-bearing against the ratified specification."
+                    >
+                      Tech Preview
+                    </sup>
                   </h1>
                 </div>
-                {/* nowrap only once there is room for it: on a phone it pushed the
-                    line past the viewport, and the root clips overflow. */}
-                <p
-                  className="text-xs ml-9 sm:whitespace-nowrap"
-                  style={{ color: 'var(--riscv-text-2)' }}
-                >
-                  Reference for extensions, profiles &amp; per-instruction encoding.
-                </p>
-                {/* Stat bar */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 ml-9">
+                {/* Counts. Wrappable on purpose: this sits inside an
+                    overflow-x-hidden root that clips rather than scrolls, so on
+                    a narrow screen they drop below the title instead of off the
+                    edge. */}
+                <div className="flex flex-wrap items-center gap-x-2 text-[11px]">
                   {[
                     { label: 'Extensions', value: totalExtensions },
                     { label: 'Profiles', value: Object.keys(profiles).length },
                     { label: 'Instructions', value: `${(totalInstructions / 1000).toFixed(1)}k+` },
                     { label: 'Volumes', value: 2 },
                   ].map(({ label, value }) => (
-                    <div key={label} className="flex items-baseline gap-1.5">
-                      <span className="text-base font-black" style={{ color: 'var(--riscv-gold)' }}>
-                        {value}
-                      </span>
-                      <span
-                        className="text-[11px] uppercase tracking-wider"
-                        style={{ color: 'var(--riscv-text-3)' }}
-                      >
-                        {label}
-                      </span>
-                    </div>
+                    <span
+                      key={label}
+                      className="whitespace-nowrap"
+                      style={{ color: 'var(--riscv-text-3)' }}
+                    >
+                      <span style={{ color: 'var(--riscv-text-2)', fontWeight: 600 }}>{value}</span>{' '}
+                      {label}
+                      {label !== 'Volumes' && <span className="mx-1 opacity-50">&middot;</span>}
+                    </span>
                   ))}
+
+                  {/* A preview needs somewhere for the findings to go, and it
+                      should be reachable from the caveat rather than buried in
+                      a footer nobody scrolls to. */}
+                  <a
+                    href="https://github.com/riscv/riscv-extensions-landscape/issues"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="riscv-report-btn ml-3 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap"
+                    title="Report an issue on GitHub"
+                  >
+                    <Bug size={12} />
+                    Report an issue
+                    <ExternalLink size={10} className="opacity-70" />
+                  </a>
                 </div>
               </div>
 
@@ -1827,13 +1811,13 @@ const RISCVExplorer = () => {
                   all. Stretch until there is room to right-align.
                   min-w-0 because a flex item defaults to min-width:auto and
                   refuses to shrink below its content. */}
-              <div className="flex flex-col items-stretch xl:items-end gap-3 min-w-0 xl:shrink-0">
-                {/* Controls - Row 1 */}
-                <div className="flex flex-wrap items-center justify-start xl:justify-end gap-x-3 gap-y-3">
+              <div className="riscv-toolbar flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+                {/* Filters — what you are looking at. */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
                   {/* Grouped Filters Container. Wraps on narrow screens; without
                       it this row stays one 557px line that cannot shrink. */}
                   <div
-                    className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3.5 py-2 rounded-xl border shadow-lg backdrop-blur-md"
+                    className="flex flex-wrap items-center gap-x-3 gap-y-2"
                     style={{
                       background: 'var(--riscv-plate)',
                       borderColor: 'rgba(255,255,255,0.08)',
@@ -1850,29 +1834,50 @@ const RISCVExplorer = () => {
                       </span>
                       <div className="flex flex-wrap gap-1.5">
                         {Object.keys(profiles).map((profile) => (
-                          <button
-                            key={profile}
-                            onClick={() =>
-                              setActiveProfile((current) => {
-                                // Profile and volume are mutually exclusive. With
-                                // both live, highlight matched either one while
-                                // dimming followed only the volume, so the grid
-                                // gave no clue which filter was acting.
-                                setActiveVolume(null);
-                                setSelectedInstruction(null);
-                                setSearchMatches(null);
-                                return current === profile ? null : profile;
-                              })
-                            }
-                            className={[
-                              'px-3 py-1.5 text-[12px] rounded-lg transition-all duration-200 font-medium',
-                              activeProfile === profile
-                                ? 'bg-slate-700/80 text-white shadow-inner border border-slate-500/50'
-                                : 'text-slate-300 hover:text-white hover:bg-slate-700/40 border border-transparent hover:border-slate-600/30',
-                            ].join(' ')}
-                          >
-                            {profile}
-                          </button>
+                          <span key={profile} className="inline-flex items-center">
+                            <button
+                              onClick={() =>
+                                setActiveProfile((current) => {
+                                  // Profile and volume are mutually exclusive. With
+                                  // both live, highlight matched either one while
+                                  // dimming followed only the volume, so the grid
+                                  // gave no clue which filter was acting.
+                                  setActiveVolume(null);
+                                  setSelectedInstruction(null);
+                                  setSearchMatches(null);
+                                  return current === profile ? null : profile;
+                                })
+                              }
+                              className={[
+                                'px-3 py-1.5 text-[12px] rounded-lg transition-all duration-200 font-medium',
+                                activeProfile === profile
+                                  ? 'bg-slate-700/80 text-white shadow-inner border border-slate-500/50'
+                                  : 'text-slate-300 hover:text-white hover:bg-slate-700/40 border border-transparent hover:border-slate-600/30',
+                              ].join(' ')}
+                            >
+                              {profile}
+                            </button>
+                            {/* Sibling, not nested: a button inside a button is
+                              invalid HTML and React warns about it. */}
+                            {compareMode && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleCompareProfile(profile);
+                                }}
+                                aria-pressed={compareProfileNames.has(profile)}
+                                className="riscv-pin-btn ml-0.5 px-1 py-0.5 rounded border text-[11px]"
+                                title={
+                                  compareProfileNames.has(profile)
+                                    ? `Remove ${profile} from comparison`
+                                    : `Compare ${profile}`
+                                }
+                              >
+                                <Columns size={9} />
+                              </button>
+                            )}
+                          </span>
                         ))}
                       </div>
                     </div>
@@ -1913,7 +1918,15 @@ const RISCVExplorer = () => {
                       </div>
                     </div>
                   </div>
+                </div>
 
+                {/* Actions — what you can do. Tools open a dialog and return
+                    you to where you were; modes latch and change how the whole
+                    page behaves. They are deliberately not styled alike: a tool
+                    stays neutral at all times, a mode takes its accent only
+                    while it is ON, so the loudest control in the toolbar is
+                    always a mode that is actually running. */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
                   {/* Encoder Validator - Sleek Outline Button */}
                   <button
                     type="button"
@@ -1925,13 +1938,10 @@ const RISCVExplorer = () => {
                     ref={encoderTriggerRef}
                     aria-haspopup="dialog"
                     aria-expanded={encoderValidatorOpen}
-                    className="group inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-300 whitespace-nowrap border border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/15 hover:border-indigo-400 hover:shadow-[0_0_15px_rgba(99,102,241,0.2)]"
+                    className="riscv-tool-btn group inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-300 whitespace-nowrap border"
                     data-tooltip="Validate a proposed instruction encoding against the existing instruction set"
                   >
-                    <ScanSearch
-                      size={14}
-                      className="text-indigo-400/80 group-hover:text-indigo-300 transition-colors"
-                    />
+                    <ScanSearch size={14} className="opacity-80" />
                     <span className="whitespace-nowrap">Encoder Validator</span>
                   </button>
 
@@ -1943,10 +1953,13 @@ const RISCVExplorer = () => {
                     onClick={() => setEncodingMapOpen(true)}
                     aria-haspopup="dialog"
                     aria-expanded={encodingMapOpen}
-                    className="group inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-300 whitespace-nowrap border hover:opacity-90"
-                    // Tokens, not Tailwind amber: text-amber-300 has no light-theme
-                    // remapping and measured 1.33:1 on the pastel ground.
-                    style={{ color: 'var(--riscv-gold)', borderColor: 'var(--riscv-gold-glow)', background: 'var(--riscv-gold-dim)' }}
+                    className="riscv-tool-btn group inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-300 whitespace-nowrap border"
+                    // Colour, border and hover all come from .riscv-tool-btn.
+                    // Deliberately no inline style: an inline `color` outranks
+                    // the class's :hover rule, so the button would never light
+                    // up under the cursor. The class uses tokens rather than
+                    // Tailwind amber, which has no light-theme remapping and
+                    // measured 1.33:1 on the pastel ground.
                     data-tooltip="See how the 32-bit opcode space is allocated"
                     title="See how the 32-bit opcode space is allocated"
                   >
@@ -1955,6 +1968,55 @@ const RISCVExplorer = () => {
                   </button>
 
                   {/* Theme toggle relocated to header */}
+
+                  {/* Tools end, modes begin. */}
+                  <div className="h-6 w-px" style={{ background: 'var(--riscv-border-2)' }} />
+
+                  {/* Compare mode. Deliberately a mode rather than always-on
+                    affordances: a pin on every one of 227 tiles, every
+                    instruction chip and every profile button is a lot of
+                    permanent furniture for an occasional task. Turning it off
+                    hides the affordances and the tray but keeps the pinned set
+                    and the ?cmp= URL, so it never destroys a comparison. */}
+                  <button
+                    type="button"
+                    aria-pressed={compareMode}
+                    onClick={() => setCompareMode((v) => !v)}
+                    className={[
+                      'compare-mode-toggle relative inline-flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-xl transition-all duration-300 whitespace-nowrap',
+                      compareMode
+                        ? 'bg-gradient-to-b from-violet-400 to-violet-500 text-slate-900 hover:from-violet-300 hover:to-violet-400'
+                        : 'bg-slate-800/80 text-violet-300/90 border border-violet-400/30 hover:bg-slate-700/80 hover:text-violet-200',
+                    ].join(' ')}
+                    style={{
+                      boxShadow: compareMode
+                        ? '0 4px 18px rgba(167,139,250,0.35)'
+                        : '0 2px 10px rgba(0,0,0,0.2)',
+                    }}
+                    data-tooltip={
+                      compareMode
+                        ? 'Compare mode is ON — pin extensions, instructions or profiles to compare them. Click here to turn off; pinned items are kept.'
+                        : 'Turn on Compare mode to pin extensions, instructions or profiles side by side'
+                    }
+                  >
+                    <Columns size={14} className="opacity-80 flex-shrink-0" />
+                    <span className="whitespace-nowrap hidden sm:inline">Compare</span>
+                    <span
+                      className={[
+                        'inline-flex items-center justify-center px-1.5 h-[16px] rounded-full text-[10px] font-black tracking-wide',
+                        compareMode
+                          ? 'bg-slate-900/75 text-violet-300'
+                          : 'bg-slate-900/60 text-slate-400',
+                      ].join(' ')}
+                    >
+                      {compareMode ? 'ON' : 'OFF'}
+                    </span>
+                    {comparePinnedTotal > 0 && (
+                      <span className="inline-flex items-center justify-center min-w-[18px] px-1 h-[18px] rounded-full text-[10px] font-black bg-slate-900/75 text-violet-300">
+                        {comparePinnedTotal}
+                      </span>
+                    )}
+                  </button>
 
                   {/* ISA Configuration Builder — fused action group */}
                   <div className="relative inline-flex items-stretch rounded-xl">
@@ -2013,9 +2075,13 @@ const RISCVExplorer = () => {
 
                       {/* Builder Contextual Actions Toolbar.
                         Hidden while the full panel is open: this toolbar belongs to the
-                        header, but it sits at z-50 against the panel's z-40, so leaving it
-                        mounted floats it on top of the modal. Its actions are redundant
-                        there too, one of them being "open the panel". */}
+                        header. It used to float on top of the panel modal, which
+                        was the original reason to unmount it; since .riscv-toolbar
+                        took z-index 30 — to stop its backdrop-filter trapping the
+                        profile menu — everything in this toolbar now paints below
+                        the panel's z-40 instead. The guard stays because the
+                        actions are redundant while the panel is open, one of them
+                        being "open the panel". */}
                       {builderMode && !workspacePanelOpen && (
                         <div className="builder-toolbar absolute top-[calc(100%+6px)] left-0 right-0 flex items-center justify-between p-1 bg-slate-800/90 border border-amber-500/40 rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] backdrop-blur-xl z-50 animate-fade-in-up gap-1">
                           {/* Open the full panel */}
@@ -2026,7 +2092,19 @@ const RISCVExplorer = () => {
                             onClick={() => setWorkspacePanelOpen(true)}
                             className={`builder-action-amber ${workspaceIds.size === 0 ? 'flex-none px-4' : 'flex-1'} flex items-center justify-center py-1.5 text-amber-300 hover:bg-amber-500/30 hover:text-amber-100 transition-all duration-300 rounded-lg hover:shadow-[0_0_12px_rgba(251,191,36,0.3)]`}
                           >
-                            <Maximize2 size={14} className="transition-transform hover:scale-110" />
+                            {/* PanelRightOpen, not Maximize2. The diagonal
+                                arrows are the universal "go fullscreen" gesture,
+                                but this opens a drawer that slides in from the
+                                right — the icon was describing the wrong motion.
+                                The label carries the rest: three unlabelled icons
+                                in a row make the reader guess, and this is the
+                                primary action of the three. */}
+                            <PanelRightOpen size={14} className="flex-shrink-0" />
+                            {workspaceIds.size > 0 && (
+                              <span className="ml-1.5 text-[11px] font-bold whitespace-nowrap hidden sm:inline">
+                                Open panel
+                              </span>
+                            )}
                           </button>
 
                           {/* Profile Menu */}
@@ -2395,7 +2473,7 @@ const RISCVExplorer = () => {
             </div>
           </div>
           {/* ─── Main Grid ───────────────────────────────────────────────── */}
-          <div className="lg:col-span-9 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 auto-rows-min">
+          <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 auto-rows-min">
             {/* Search Bar */}
             <div className="col-span-full mb-2 flex items-center gap-3">
               <div className="relative flex-1">
@@ -2966,7 +3044,7 @@ const RISCVExplorer = () => {
           {/* ─── Sidebar ─────────────────────────────────────────────────── */}
           <div
             id="detail-panel"
-            className={`lg:col-span-3 mt-6 lg:mt-0 ${selectedExt ? 'panel-open' : ''}`}
+            className={`lg:col-span-4 mt-6 lg:mt-0 ${selectedExt ? 'panel-open' : ''}`}
           >
             <div
               className="sticky top-6 riscv-card backdrop-blur-sm min-h-[400px] max-h-[calc(100vh-3rem)] flex flex-col overflow-hidden"
@@ -3199,47 +3277,80 @@ const RISCVExplorer = () => {
                               const isClickable = Boolean(instructionDetails);
                               const isDeprecated = Boolean(instructionDetails?.deprecated);
                               return (
-                                <button
-                                  key={mnemonic}
-                                  type="button"
-                                  onClick={() => {
-                                    if (!isClickable) return;
-                                    setSelectedInstruction(
-                                      isActive ? null : { mnemonic, ...instructionDetails },
-                                    );
-                                    setSearchMatches((current) => {
-                                      if (
-                                        !current ||
-                                        current.extId !== selectedExt.id ||
-                                        current.query !== searchQuery.trim().toLowerCase()
-                                      ) {
-                                        return current;
-                                      }
-                                      const idx = current.mnemonics.indexOf(mnemonic);
-                                      if (idx === -1) return current;
-                                      return { ...current, index: idx };
-                                    });
-                                  }}
-                                  className={`px-1.5 py-0.5 rounded border text-[11px] font-mono tracking-tight ${
-                                    isActive
-                                      ? isDeprecated
-                                        ? 'border-red-400 bg-red-500/10 text-red-200'
-                                        : 'border-emerald-400 bg-emerald-500/10 text-emerald-200'
-                                      : isHit
-                                        ? 'border-yellow-400 bg-yellow-500/10 text-yellow-200'
-                                        : isDeprecated
-                                          ? 'border-red-500/60 bg-red-500/5 text-red-200'
-                                          : 'border-slate-700 bg-slate-800/70'
-                                  }`}
-                                  title={
-                                    isClickable
-                                      ? `View details for ${mnemonic}`
-                                      : `${mnemonic} (no details yet)`
-                                  }
-                                  disabled={!isClickable}
-                                >
-                                  {mnemonic}
-                                </button>
+                                <span key={mnemonic} className="inline-flex items-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (!isClickable) return;
+                                      setSelectedInstruction(
+                                        isActive ? null : { mnemonic, ...instructionDetails },
+                                      );
+                                      setSearchMatches((current) => {
+                                        if (
+                                          !current ||
+                                          current.extId !== selectedExt.id ||
+                                          current.query !== searchQuery.trim().toLowerCase()
+                                        ) {
+                                          return current;
+                                        }
+                                        const idx = current.mnemonics.indexOf(mnemonic);
+                                        if (idx === -1) return current;
+                                        return { ...current, index: idx };
+                                      });
+                                    }}
+                                    className={`px-1.5 py-0.5 rounded-l border text-[11px] font-mono tracking-tight ${
+                                      isActive
+                                        ? isDeprecated
+                                          ? 'border-red-400 bg-red-500/10 text-red-200'
+                                          : 'border-emerald-400 bg-emerald-500/10 text-emerald-200'
+                                        : isHit
+                                          ? 'border-yellow-400 bg-yellow-500/10 text-yellow-200'
+                                          : isDeprecated
+                                            ? 'border-red-500/60 bg-red-500/5 text-red-200'
+                                            : 'border-slate-700 bg-slate-800/70'
+                                    }`}
+                                    title={
+                                      isClickable
+                                        ? `View details for ${mnemonic}`
+                                        : `${mnemonic} (no details yet)`
+                                    }
+                                    disabled={!isClickable}
+                                  >
+                                    {mnemonic}
+                                  </button>
+                                  {/* Gated on compareMode like the tile pin, the
+                                      profile pin and the tray. Without it a
+                                      reader with Compare OFF could pin an
+                                      instruction — the chip lit up and the URL
+                                      gained ?cmp=i:… — while the tray stayed
+                                      hidden, so nothing could open the
+                                      comparison they had just built. */}
+                                  {compareMode &&
+                                    isClickable &&
+                                    (() => {
+                                      const pinned = compareInstrKeys.has(
+                                        instructionKey(selectedExt.id, mnemonic),
+                                      );
+                                      return (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleCompareInstruction(selectedExt.id, mnemonic);
+                                          }}
+                                          aria-pressed={pinned}
+                                          className="riscv-pin-btn px-1 py-0.5 rounded-r border-l-0 text-[11px]"
+                                          title={
+                                            pinned
+                                              ? `Remove ${mnemonic} from comparison`
+                                              : `Compare ${mnemonic}`
+                                          }
+                                        >
+                                          <Columns size={9} />
+                                        </button>
+                                      );
+                                    })()}
+                                </span>
                               );
                             })}
                           </div>
@@ -3587,7 +3698,7 @@ const RISCVExplorer = () => {
 
         {/* ─── Footer ─────────────────────────────────────────────────── */}
         <footer
-          className="mt-10 pb-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-[12px]"
+          className="mt-10 pb-8 flex flex-col sm:flex-row items-center justify-center gap-x-3 gap-y-2 text-[12px]"
           style={{
             borderTop: '1px solid var(--riscv-border)',
             paddingTop: '1.5rem',
@@ -3603,25 +3714,25 @@ const RISCVExplorer = () => {
             <span>
               Data sourced from{' '}
               <a
-                href="https://github.com/riscv/riscv-isa-manual"
+                href="https://github.com/riscv/riscv-unified-db"
                 target="_blank"
-                rel="noreferrer"
+                rel="noreferrer noopener"
                 className="hover:underline"
                 style={{ color: 'var(--riscv-violet)' }}
               >
-                riscv/riscv-isa-manual
+                riscv/riscv-unified-db
               </a>
             </span>
           </div>
           <div className="flex items-center gap-3">
             <a
-              href="https://github.com/riscv/riscv-isa-manual"
+              href="https://github.com/riscv/riscv-unified-db"
               target="_blank"
-              rel="noreferrer"
+              rel="noreferrer noopener"
               className="hover:opacity-80 tooltip-align-right"
               style={{ color: 'var(--riscv-text-2)' }}
-              data-tooltip="View on GitHub"
-              aria-label="View on GitHub"
+              data-tooltip="View riscv-unified-db on GitHub"
+              aria-label="View riscv-unified-db on GitHub"
             >
               <BookOpen size={14} />
             </a>
@@ -3634,9 +3745,33 @@ const RISCVExplorer = () => {
         onClose={() => setEncodingMapOpen(false)}
         catalog={extensions}
         onSelectExtension={(id) => {
-          const target = Object.values(extensions).flat().find((e) => e && e.id === id);
+          const target = Object.values(extensions)
+            .flat()
+            .find((e) => e && e.id === id);
           if (target) handleSelectExt(target);
         }}
+      />
+
+      <CompareTray
+        extIds={compareExtIds}
+        instrKeys={compareInstrKeys}
+        profileNames={compareProfileNames}
+        visible={compareMode}
+        kind={compareKind}
+        onKindChange={setCompareKind}
+        onRemove={removeCompareItem}
+        onClear={clearCompare}
+        onOpen={openCompareView}
+      />
+
+      <CompareView
+        open={compareOpen}
+        model={compareModel}
+        onClose={closeCompareView}
+        onCopyMarkdown={copyCompareMarkdown}
+        onCopyLink={copyCompareLink}
+        expandDeps={compareExpandDeps}
+        onToggleExpandDeps={setCompareExpandDeps}
       />
 
       {encoderValidatorOpen && (
