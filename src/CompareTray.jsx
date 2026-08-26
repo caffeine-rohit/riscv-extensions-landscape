@@ -155,6 +155,13 @@ export default function CompareTray({
           onClick={onOpen}
           disabled={!canCompare}
           title={canCompare ? 'Launch side-by-side comparison' : 'Pin at least 2 items to compare'}
+          // A disabled button leaves the tab order, so `title` alone never
+          // reaches a screen reader — the requirement has to be in the name.
+          aria-label={
+            canCompare
+              ? `Compare ${active.length} pinned items side by side`
+              : `Compare — pin at least 2 items first, ${active.length} pinned`
+          }
         >
           <GitCompare size={13} className="shrink-0" />
           <span>Compare ({active.length})</span>
