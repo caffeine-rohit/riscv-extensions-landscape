@@ -22,7 +22,7 @@
  *      "did membership change for THIS id" re-renders only what changed.
  */
 import React from 'react';
-import { Plus, Columns } from 'lucide-react';
+import { Plus, GitCompare } from 'lucide-react';
 import { tilePropsAreEqual } from './tileMemo.js';
 
 function ExtensionTile({
@@ -139,16 +139,17 @@ function ExtensionTile({
               width: 18,
               height: 18,
               borderRadius: 5,
-              border: `1px solid ${inCompare ? 'var(--riscv-check-edge)' : 'var(--riscv-border-2)'}`,
-              background: inCompare ? 'var(--riscv-check-fill)' : 'var(--riscv-surface-2)',
-              color: inCompare ? 'var(--riscv-check)' : 'var(--riscv-text-3)',
+              border: `1px solid ${inCompare ? 'var(--riscv-violet)' : 'var(--riscv-border-2)'}`,
+              background: inCompare ? 'var(--riscv-violet)' : 'var(--riscv-surface-2)',
+              color: inCompare ? '#ffffff' : 'var(--riscv-text-3)',
+              boxShadow: inCompare ? '0 0 10px rgba(139, 124, 248, 0.4)' : 'none',
               cursor: 'pointer',
-              transition: 'all 0.15s',
+              transition: 'all 0.15s ease',
               padding: 0,
             }}
-            title={inCompare ? `Remove ${data.id} from comparison` : `Compare ${data.id}`}
+            title={inCompare ? `Remove ${data.id} from comparison` : `Pin ${data.id} to comparison`}
           >
-            <Columns size={9} />
+            <GitCompare size={9} strokeWidth={inCompare ? 2.5 : 2} />
           </button>
         )}
 

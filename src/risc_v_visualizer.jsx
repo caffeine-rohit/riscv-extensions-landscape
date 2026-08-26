@@ -41,7 +41,7 @@ import {
   Maximize2,
   Sun,
   Moon,
-  Columns,
+  GitCompare,
 } from 'lucide-react';
 import extensions from './riscv_extensions.json';
 import EncodingMap from './EncodingMap.jsx';
@@ -1916,14 +1916,14 @@ const RISCVExplorer = () => {
                                   toggleCompareProfile(profile);
                                 }}
                                 aria-pressed={compareProfileNames.has(profile)}
-                                className="riscv-pin-btn ml-0.5 px-1 py-0.5 rounded border text-[11px]"
+                                className="riscv-pin-btn ml-0.5 px-1 py-0.5 rounded border text-[11px] inline-flex items-center justify-center transition-all"
                                 title={
                                   compareProfileNames.has(profile)
                                     ? `Remove ${profile} from comparison`
-                                    : `Compare ${profile}`
+                                    : `Pin ${profile} to comparison`
                                 }
                               >
-                                <Columns size={9} />
+                                <GitCompare size={9} strokeWidth={compareProfileNames.has(profile) ? 2.5 : 2} />
                               </button>
                             )}
                           </span>
@@ -2032,40 +2032,51 @@ const RISCVExplorer = () => {
                     type="button"
                     aria-pressed={compareMode}
                     onClick={() => setCompareMode((v) => !v)}
-                    className={[
-                      'compare-mode-toggle relative inline-flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-xl transition-all duration-300 whitespace-nowrap',
+                    className="compare-mode-toggle relative inline-flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-xl transition-all duration-200 whitespace-nowrap cursor-pointer"
+                    style={
                       compareMode
-                        ? 'bg-gradient-to-b from-violet-400 to-violet-500 text-slate-900 hover:from-violet-300 hover:to-violet-400'
-                        : 'bg-slate-800/80 text-violet-300/90 border border-violet-400/30 hover:bg-slate-700/80 hover:text-violet-200',
-                    ].join(' ')}
-                    style={{
-                      boxShadow: compareMode
-                        ? '0 4px 18px rgba(167,139,250,0.35)'
-                        : '0 2px 10px rgba(0,0,0,0.2)',
-                    }}
+                        ? {
+                            background: 'var(--riscv-violet)',
+                            color: '#ffffff',
+                            boxShadow: '0 4px 18px rgba(139,124,248,0.35)',
+                            border: '1px solid var(--riscv-violet)',
+                          }
+                        : {
+                            background: 'var(--riscv-surface)',
+                            color: 'var(--riscv-violet)',
+                            border: '1px solid rgba(139,124,248,0.35)',
+                          }
+                    }
                     data-tooltip={
                       compareMode
-                        ? 'Compare mode is ON — pin extensions, instructions or profiles to compare them. Click here to turn off; pinned items are kept.'
-                        : 'Turn on Compare mode to pin extensions, instructions or profiles side by side'
+                        ? 'Compare mode is ON — click to turn off (pinned items are preserved)'
+                        : 'Turn on Compare mode to pin extensions, instructions, or profiles'
                     }
                   >
-                    <Columns size={14} className="opacity-80 flex-shrink-0" />
+                    <GitCompare size={14} className="flex-shrink-0" />
                     <span className="whitespace-nowrap hidden sm:inline">Compare</span>
                     <span
-                      className={[
-                        'inline-flex items-center justify-center px-1.5 h-[16px] rounded-full text-[10px] font-black tracking-wide',
+                      className="inline-flex items-center justify-center px-1.5 h-[16px] rounded-full text-[10px] font-black tracking-wide"
+                      style={
                         compareMode
-                          ? 'bg-slate-900/75 text-violet-300'
-                          : 'bg-slate-900/60 text-slate-400',
-                      ].join(' ')}
+                          ? {
+                              background: 'rgba(0,0,0,0.25)',
+                              color: '#ffffff',
+                            }
+                          : comparePinnedTotal > 0
+                            ? {
+                                background: 'var(--riscv-violet-dim)',
+                                color: 'var(--riscv-violet)',
+                                border: '1px solid rgba(139,124,248,0.3)',
+                              }
+                            : {
+                                background: 'var(--riscv-tint-3)',
+                                color: 'var(--riscv-text-3)',
+                              }
+                      }
                     >
-                      {compareMode ? 'ON' : 'OFF'}
+                      {comparePinnedTotal > 0 ? comparePinnedTotal : compareMode ? 'ON' : 'OFF'}
                     </span>
-                    {comparePinnedTotal > 0 && (
-                      <span className="inline-flex items-center justify-center min-w-[18px] px-1 h-[18px] rounded-full text-[10px] font-black bg-slate-900/75 text-violet-300">
-                        {comparePinnedTotal}
-                      </span>
-                    )}
                   </button>
 
                   {/* ISA Configuration Builder — fused action group */}
@@ -3415,14 +3426,14 @@ const RISCVExplorer = () => {
                                             toggleCompareInstruction(selectedExt.id, mnemonic);
                                           }}
                                           aria-pressed={pinned}
-                                          className="riscv-pin-btn px-1 py-0.5 rounded-r border-l-0 text-[11px]"
+                                          className="riscv-pin-btn px-1 py-0.5 rounded-r border-l-0 text-[11px] inline-flex items-center justify-center transition-all"
                                           title={
                                             pinned
                                               ? `Remove ${mnemonic} from comparison`
                                               : `Compare ${mnemonic}`
                                           }
                                         >
-                                          <Columns size={9} />
+                                          <GitCompare size={9} strokeWidth={pinned ? 2.5 : 2} />
                                         </button>
                                       );
                                     })()}
@@ -3492,6 +3503,41 @@ const RISCVExplorer = () => {
                               )}
                             </h4>
                             <div className="flex items-center gap-2">
+                              {(() => {
+                                const isPinned = compareInstrKeys.has(
+                                  instructionKey(selectedExt.id, selectedInstruction.mnemonic),
+                                );
+                                return (
+                                  <button
+                                    type="button"
+                                    aria-pressed={isPinned}
+                                    className="inline-flex items-center gap-1 px-2 py-1 riscv-btn tooltip-align-right"
+                                    style={
+                                      isPinned
+                                        ? {
+                                            background: 'var(--riscv-violet-dim)',
+                                            color: 'var(--riscv-violet)',
+                                            borderColor: 'rgba(139, 124, 248, 0.4)',
+                                          }
+                                        : undefined
+                                    }
+                                    onClick={() => {
+                                      toggleCompareInstruction(selectedExt.id, selectedInstruction.mnemonic);
+                                      if (!compareMode) setCompareMode(true);
+                                    }}
+                                    data-tooltip={isPinned ? 'Remove from comparison' : 'Pin to comparison'}
+                                  >
+                                    <GitCompare
+                                      size={12}
+                                      style={{
+                                        color: isPinned ? 'var(--riscv-violet)' : 'inherit',
+                                        opacity: isPinned ? 1 : 0.7,
+                                      }}
+                                    />
+                                    {isPinned ? 'Pinned' : 'Compare'}
+                                  </button>
+                                );
+                              })()}
                               <button
                                 type="button"
                                 className="inline-flex items-center gap-1 px-2 py-1 riscv-btn tooltip-align-right"
@@ -3855,6 +3901,7 @@ const RISCVExplorer = () => {
         open={compareOpen}
         model={compareModel}
         onClose={closeCompareView}
+        onRemoveItem={removeCompareItem}
         onCopyMarkdown={copyCompareMarkdown}
         onCopyLink={copyCompareLink}
         expandDeps={compareExpandDeps}
@@ -4309,6 +4356,41 @@ const RISCVExplorer = () => {
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
+                  {(() => {
+                    const isPinned = compareInstrKeys.has(
+                      instructionKey(selectedExt.id, selectedInstruction.mnemonic),
+                    );
+                    return (
+                      <button
+                        type="button"
+                        aria-pressed={isPinned}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 riscv-btn tooltip-bottom-right"
+                        style={
+                          isPinned
+                            ? {
+                                background: 'var(--riscv-violet-dim)',
+                                color: 'var(--riscv-violet)',
+                                borderColor: 'rgba(139, 124, 248, 0.4)',
+                              }
+                            : undefined
+                        }
+                        onClick={() => {
+                          toggleCompareInstruction(selectedExt.id, selectedInstruction.mnemonic);
+                          if (!compareMode) setCompareMode(true);
+                        }}
+                        data-tooltip={isPinned ? 'Remove from comparison' : 'Pin to comparison'}
+                      >
+                        <GitCompare
+                          size={13}
+                          style={{
+                            color: isPinned ? 'var(--riscv-violet)' : 'inherit',
+                            opacity: isPinned ? 1 : 0.7,
+                          }}
+                        />
+                        <span>{isPinned ? 'Pinned' : 'Compare'}</span>
+                      </button>
+                    );
+                  })()}
                   <button
                     type="button"
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 riscv-btn tooltip-bottom-right"

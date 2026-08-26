@@ -311,11 +311,13 @@ pre,
   background: rgba(139, 124, 248, 0.2);
 }
 
-/* A bit position the compared instructions disagree on. An inset ring rather
-   than a background, so the field colouring underneath stays readable. */
+/* A bit position the compared instructions disagree on. Refined border and glow so bit digits inside stay completely legible. */
 .riscv-bit-diff {
-  box-shadow: inset 0 0 0 2px var(--riscv-gold);
+  box-shadow: inset 0 0 0 1.5px var(--riscv-gold), 0 0 5px rgba(245, 197, 66, 0.4);
   position: relative;
+  font-weight: 700;
+  color: var(--riscv-text) !important;
+  z-index: 1;
 }
 
 /* Extension tile hover lift */
@@ -783,10 +785,18 @@ pre,
 /* Panels and toolbars that painted a dark plate inline keep their own colour;
    these are the containers that read as holes on light. */
 :root[data-theme='light'] .riscv-card,
+:root[data-theme='light'] .bg-slate-950,
+:root[data-theme='light'] .bg-slate-950\/90,
+:root[data-theme='light'] .bg-slate-950\/80,
+:root[data-theme='light'] .bg-slate-950\/75,
+:root[data-theme='light'] .bg-slate-950\/50,
+:root[data-theme='light'] .bg-slate-950\/40,
+:root[data-theme='light'] .bg-slate-950\/30,
 :root[data-theme='light'] .bg-slate-900\/50,
 :root[data-theme='light'] .bg-slate-900\/60,
-:root[data-theme='light'] .bg-slate-950\/40,
-:root[data-theme='light'] .bg-slate-950\/50,
+:root[data-theme='light'] .bg-slate-900\/75,
+:root[data-theme='light'] .bg-slate-900\/80,
+:root[data-theme='light'] .bg-slate-900\/90,
 :root[data-theme='light'] .riscv-card-2 {
   background: var(--riscv-surface);
   border-color: var(--riscv-border);
@@ -817,14 +827,47 @@ pre,
   color: #047857 !important;
 }
 
+/* Violet palette remappings for light theme */
+:root[data-theme='light'] .bg-violet-950,
+:root[data-theme='light'] .bg-violet-950\/90,
+:root[data-theme='light'] .bg-violet-950\/80,
+:root[data-theme='light'] .bg-violet-950\/50,
+:root[data-theme='light'] .bg-violet-950\/30,
+:root[data-theme='light'] .bg-violet-500\/20,
+:root[data-theme='light'] .bg-violet-500\/10 {
+  background: #efeafc !important;
+}
+:root[data-theme='light'] .border-violet-900\/60,
+:root[data-theme='light'] .border-violet-700\/50,
+:root[data-theme='light'] .border-violet-400\/60,
+:root[data-theme='light'] .border-violet-400\/30 {
+  border-color: #d3c5f3 !important;
+}
+:root[data-theme='light'] .text-violet-300,
+:root[data-theme='light'] .text-violet-200,
+:root[data-theme='light'] .text-violet-100 {
+  color: #4b2f9c !important;
+}
+
 /* Sidebar Details Panel explicit Tailwind overrides for light theme */
 :root[data-theme='light'] .bg-slate-900 {
   background: var(--riscv-surface-2) !important;
 }
 :root[data-theme='light'] .bg-slate-800,
+:root[data-theme='light'] .bg-slate-800\/90,
+:root[data-theme='light'] .bg-slate-800\/80,
 :root[data-theme='light'] .bg-slate-800\/70,
 :root[data-theme='light'] .bg-slate-800\/50 {
   background: var(--riscv-surface) !important;
+}
+:root[data-theme='light'] .bg-slate-700,
+:root[data-theme='light'] .bg-slate-700\/90,
+:root[data-theme='light'] .bg-slate-700\/80,
+:root[data-theme='light'] .bg-slate-700\/70,
+:root[data-theme='light'] .bg-slate-700\/60,
+:root[data-theme='light'] .bg-slate-700\/50,
+:root[data-theme='light'] .bg-slate-700\/40 {
+  background: var(--riscv-surface-2) !important;
 }
 :root[data-theme='light'] .bg-slate-600 {
   background: var(--riscv-muted) !important;
@@ -1224,51 +1267,46 @@ pre,
 .compare-head {
   position: sticky;
   top: 0;
-  z-index: 2;
-  padding: 8px 10px;
+  z-index: 10;
+  padding: 10px 14px;
   background: var(--riscv-panel);
   border-bottom: 1px solid var(--riscv-border-2);
 }
 .compare-attr {
   position: sticky;
   left: 0;
-  z-index: 1;
+  z-index: 9;
   background: var(--riscv-panel);
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   color: var(--riscv-text-3);
+  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.08);
 }
 .compare-head.compare-attr {
-  z-index: 3;
+  z-index: 11;
+  background: var(--riscv-panel);
 }
 .compare-cell {
-  padding: 8px 10px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--riscv-border-2);
   overflow-wrap: anywhere;
 }
-/* Agreement is context, difference is the signal.
-   tint-3 alone is a 6% white wash — technically a highlight, but invisible
-   when you are scanning fifty rows for the four that matter. A differing row
-   now carries a gold wash AND a gold edge on its sticky label cell, so the
-   rows worth reading are findable from the scrollbar. */
 .compare-same {
-  /* Dimmed with a colour token rather than opacity. Opacity composites the
-     whole cell, so at 0.38 the agreeing rows measured 2.20:1 in light and
-     3.11:1 in dark, and the presence marks — already muted — were dimmed a
-     second time down to 1.69:1. Agreeing rows are still content: a reader
-     compares RVA22 against RVA23 precisely to see what they share. The gold
-     wash and gold edge on the differing rows carry the emphasis instead. */
   color: var(--riscv-text-2);
 }
 .compare-diff {
-  background: var(--riscv-diff-bg);
+  background: rgba(139, 124, 248, 0.09);
   color: var(--riscv-text);
 }
+:root[data-theme='light'] .compare-diff {
+  background: rgba(109, 91, 208, 0.07);
+}
 .compare-attr.compare-diff {
-  box-shadow: inset 3px 0 0 var(--riscv-diff-edge);
-  color: var(--riscv-text);
-  font-weight: 600;
+  background: var(--riscv-panel) !important;
+  box-shadow: inset 3px 0 0 var(--riscv-violet), 2px 0 10px rgba(0, 0, 0, 0.08);
+  color: var(--riscv-violet);
+  font-weight: 700;
 }
 
 /* Header toolbar. A full-width plate holding filters on the left and actions
@@ -1418,21 +1456,21 @@ pre,
     border-color 0.15s ease;
 }
 .riscv-pin-btn:hover {
-  border-color: var(--riscv-check-edge);
+  border-color: rgba(139, 124, 248, 0.4);
   background: var(--riscv-tint-3);
-  color: var(--riscv-check);
+  color: var(--riscv-violet);
 }
 .riscv-pin-btn[aria-pressed='true'] {
-  border-color: var(--riscv-check-edge);
-  background: var(--riscv-check-fill);
-  color: var(--riscv-check);
+  border-color: rgba(139, 124, 248, 0.6);
+  background: rgba(139, 124, 248, 0.18);
+  color: var(--riscv-violet);
 }
 .riscv-pin-btn[aria-pressed='true']:hover {
-  border-color: var(--riscv-check);
-  background: var(--riscv-tint-4);
+  border-color: var(--riscv-violet);
+  background: rgba(139, 124, 248, 0.28);
 }
 .riscv-pin-btn:focus-visible {
-  outline: 2px solid var(--riscv-check-edge);
+  outline: 2px solid var(--riscv-violet);
   outline-offset: 1px;
 }
 
@@ -1511,3 +1549,196 @@ pre,
   white-space: nowrap;
   border-width: 0;
 }
+
+/* ─── Mission-Control Comparison Ecosystem ────────────────────────────────── */
+
+@keyframes dockSlideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+.riscv-compare-dock {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 45;
+  width: auto;
+  max-width: min(96vw, 1060px);
+  background: var(--riscv-panel);
+  border: 1px solid var(--riscv-tint-4);
+  box-shadow: 0 20px 48px -10px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 18px;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  animation: dockSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+:root[data-theme='light'] .riscv-compare-dock {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 20px 48px -10px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+.riscv-dock-tab-group {
+  display: flex;
+  align-items: center;
+  background: var(--riscv-surface-2);
+  padding: 3px;
+  border-radius: 12px;
+  border: 1px solid var(--riscv-border-2);
+  gap: 2px;
+}
+
+.riscv-dock-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--riscv-text-3);
+  transition: all 0.18s ease;
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.riscv-dock-tab:hover {
+  color: var(--riscv-text);
+  background: var(--riscv-tint-2);
+}
+
+.riscv-dock-tab[aria-pressed='true'] {
+  background: var(--riscv-panel);
+  color: var(--riscv-text);
+  border-color: var(--riscv-border-2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.riscv-dock-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-family: monospace;
+  font-weight: 700;
+}
+
+.riscv-dock-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-family: monospace;
+  background: var(--riscv-surface-2);
+  border: 1px solid var(--riscv-border-2);
+  color: var(--riscv-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: all 0.15s ease;
+}
+
+.riscv-dock-chip:hover {
+  border-color: var(--riscv-tint-4);
+  background: var(--riscv-tint-3);
+}
+
+.riscv-dock-chip-x {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  color: var(--riscv-text-3);
+  transition: all 0.15s ease;
+}
+
+.riscv-dock-chip-x:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  transform: scale(1.15);
+}
+
+/* Precision Switch for Diff Controls */
+.riscv-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 32px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--riscv-surface-2);
+  border: 1px solid var(--riscv-border-2);
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.riscv-switch[data-checked='true'] {
+  background: var(--riscv-violet);
+  border-color: var(--riscv-violet);
+}
+
+.riscv-switch-thumb {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--riscv-text-3);
+  transform: translateX(2px);
+  transition: transform 0.2s ease, background-color 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.riscv-switch[data-checked='true'] .riscv-switch-thumb {
+  background: #0f172a;
+  transform: translateX(16px);
+}
+
+:root[data-theme='light'] .riscv-switch[data-checked='true'] .riscv-switch-thumb {
+  background: #ffffff;
+}
+
+/* Column Header Remove Button in Diff View */
+.compare-col-header {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.compare-col-remove {
+  opacity: 0.4;
+  padding: 3px;
+  border-radius: 5px;
+  color: var(--riscv-text-3);
+  transition: all 0.15s ease;
+}
+
+.compare-col-header:hover .compare-col-remove,
+.compare-col-remove:hover {
+  opacity: 1;
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
