@@ -11,7 +11,7 @@
  * differences have to be the thing that stands out.
  */
 import React from 'react';
-import { X, Copy, Link2, Columns } from 'lucide-react';
+import { X, Copy, Link2, GitCompare } from 'lucide-react';
 import { toMarkdown } from './compareModel.js';
 import { focusableWithin, nextFocus } from './focusTrap.js';
 import EncodingDiagram from './EncodingDiagram.jsx';
@@ -97,6 +97,7 @@ export default function CompareView({
   open,
   model,
   onClose,
+  onRemoveItem,
   onCopyMarkdown,
   onCopyLink,
   expandDeps,
@@ -149,26 +150,29 @@ export default function CompareView({
 
   if (!open || !model || model.columns.length === 0) return null;
 
+  // Agreement is context, difference is the signal.
   const rows = differencesOnly ? model.rows.filter((r) => !r.allSame) : model.rows;
   const differing = model.rows.filter((r) => !r.allSame).length;
   const heading =
     model.kind === 'instr'
-      ? 'Compare instructions'
+      ? 'Instruction Comparison'
       : model.kind === 'profile'
-        ? 'Compare profiles'
-        : 'Compare extensions';
-  const gridColumns = `minmax(140px, 180px) repeat(${model.columns.length}, minmax(260px, 1fr))`;
+        ? 'Profile Comparison'
+        : 'Extension Comparison';
+  const colMinWidth = model.kind === 'instr' ? '330px' : '260px';
+  const gridColumns = `minmax(140px, 180px) repeat(${model.columns.length}, minmax(${colMinWidth}, 1fr))`;
 
   return (
     <div className="fixed inset-0 z-50">
+      {/* Backdrop */}
       <div
         className="absolute inset-0"
-        style={{ background: 'rgba(7,7,14,0.85)', backdropFilter: 'blur(4px)' }}
+        style={{ background: 'rgba(7,7,14,0.85)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
         onClick={onClose}
         role="presentation"
       />
 
-      <div className="absolute inset-0 p-3 md:p-8 flex items-start justify-center">
+      <div className="absolute inset-0 p-3 md:p-6 lg:p-8 flex items-start justify-center">
         <div
           ref={dialogRef}
           role="dialog"
@@ -176,98 +180,147 @@ export default function CompareView({
           aria-labelledby="compare-view-title"
           tabIndex={-1}
           className="animate-scale-in riscv-card w-full h-full flex flex-col overflow-hidden"
-          style={{ boxShadow: '0 0 60px rgba(0,0,0,0.8), 0 0 0 1px rgba(245,197,66,0.12)' }}
+          style={{
+            boxShadow: '0 0 70px rgba(0,0,0,0.85), 0 0 0 1px rgba(245,197,66,0.18)',
+            borderRadius: 20,
+          }}
         >
+          {/* Header Bar */}
           <div
-            className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-3"
-            style={{ borderBottom: '1px solid var(--riscv-border-2)' }}
+            className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-3.5"
+            style={{
+              borderBottom: '1px solid var(--riscv-border-2)',
+              background: 'var(--riscv-surface)',
+            }}
           >
-            <h2
-              id="compare-view-title"
-              className="text-[13px] font-bold uppercase tracking-wider inline-flex items-center gap-2 min-w-0"
-              style={{ color: 'var(--riscv-gold)' }}
-            >
-              <Columns size={14} /> {heading}
-              <span
-                className="font-mono normal-case tracking-normal text-[11px] hidden sm:inline"
-                style={{ color: 'var(--riscv-text-3)' }}
+            <div className="flex items-center gap-3 flex-wrap min-w-0">
+              <h2
+                id="compare-view-title"
+                className="text-[14px] font-bold uppercase tracking-wider inline-flex items-center gap-2"
+                style={{ color: 'var(--riscv-violet)' }}
               >
-                {differing} of {model.rows.length}{' '}
-                {model.kind === 'profile' ? 'rows' : 'attributes'} differ
-                {model.kind === 'profile' &&
-                  (model.expandedDependencies
-                    ? ' \u00b7 including implied extensions'
-                    : ' \u00b7 as listed in the specification')}
-              </span>
-            </h2>
+                <GitCompare size={16} /> {heading}
+              </h2>
 
-            <div className="flex flex-wrap items-center gap-2 ml-auto">
-              <label
-                className="inline-flex items-center gap-1.5 text-[11px]"
+              <span
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono"
+                style={{
+                  background: differing > 0 ? 'rgba(139, 124, 248, 0.12)' : 'var(--riscv-surface-2)',
+                  color: differing > 0 ? 'var(--riscv-violet)' : 'var(--riscv-text-3)',
+                  border: `1px solid ${differing > 0 ? 'rgba(139, 124, 248, 0.3)' : 'var(--riscv-border-2)'}`,
+                }}
+              >
+                <strong>{differing}</strong> of {model.rows.length} {model.kind === 'profile' ? 'rows' : 'attributes'} differ
+              </span>
+
+              {model.kind === 'profile' && (
+                <span className="text-[11px] font-mono hidden md:inline" style={{ color: 'var(--riscv-text-3)' }}>
+                  {model.expandedDependencies ? '(with implied extensions)' : '(as listed in the specification)'}
+                </span>
+              )}
+            </div>
+
+            {/* Toolbar Controls */}
+            <div className="flex flex-wrap items-center gap-3 ml-auto">
+              {/* Differences Only Precision Switch */}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={differencesOnly}
+                onClick={() => setDifferencesOnly((v) => !v)}
+                className="inline-flex items-center gap-2 text-[12px] font-medium cursor-pointer select-none"
                 style={{ color: 'var(--riscv-text-2)' }}
               >
-                <input
-                  type="checkbox"
-                  checked={differencesOnly}
-                  onChange={(e) => setDifferencesOnly(e.target.checked)}
-                />
-                Show only differences
-              </label>
+                <span className="riscv-switch" data-checked={differencesOnly}>
+                  <span className="riscv-switch-thumb" />
+                </span>
+                <span>Differences only</span>
+              </button>
+
+              {/* Profile Implied Extensions Switch */}
               {model.kind === 'profile' && (
-                <label
-                  className="inline-flex items-center gap-1.5 text-[11px]"
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={Boolean(expandDeps)}
+                  onClick={() => onToggleExpandDeps(!expandDeps)}
+                  className="inline-flex items-center gap-2 text-[12px] font-medium cursor-pointer select-none"
                   style={{ color: 'var(--riscv-text-2)' }}
-                  title="profiles.js lists what the specification enumerates. Expanding runs each list through the dependency graph to show what a conforming implementation actually provides."
+                  title="Expand lists through the dependency graph to show what a conforming implementation provides"
                 >
-                  <input
-                    type="checkbox"
-                    checked={Boolean(expandDeps)}
-                    onChange={(e) => onToggleExpandDeps(e.target.checked)}
-                  />
-                  Include implied extensions
-                </label>
+                  <span className="riscv-switch" data-checked={Boolean(expandDeps)}>
+                    <span className="riscv-switch-thumb" />
+                  </span>
+                  <span>Include implied</span>
+                </button>
               )}
+
+              <div className="h-4 w-px mx-0.5" style={{ background: 'var(--riscv-border-2)' }} />
+
+              {/* Actions */}
               <button
                 type="button"
-                className="riscv-btn px-2 py-1 text-[11px] inline-flex items-center gap-1"
+                className="riscv-btn px-2.5 py-1.5 text-[11px] inline-flex items-center gap-1.5 font-medium"
                 onClick={() => onCopyMarkdown(toMarkdown(model, { differencesOnly }))}
+                title="Copy comparison as Markdown table"
               >
-                <Copy size={11} /> Markdown
+                <Copy size={12} className="opacity-75" />
+                <span>Markdown</span>
               </button>
+
               <button
                 type="button"
-                className="riscv-btn px-2 py-1 text-[11px] inline-flex items-center gap-1"
+                className="riscv-btn px-2.5 py-1.5 text-[11px] inline-flex items-center gap-1.5 font-medium"
                 onClick={onCopyLink}
+                title="Copy shareable permalink for this comparison"
               >
-                <Link2 size={11} /> Link
+                <Link2 size={12} className="opacity-75" />
+                <span>Share Link</span>
               </button>
+
               <button
                 type="button"
-                className="riscv-btn p-1"
+                className="riscv-btn p-1.5"
                 onClick={onClose}
                 aria-label="Close comparison"
               >
-                <X size={14} />
+                <X size={15} />
               </button>
             </div>
           </div>
 
+          {/* Grid View */}
           <div className="flex-1 overflow-auto">
             <div className="compare-grid" style={{ gridTemplateColumns: gridColumns }}>
               <div className="compare-head compare-attr" />
               {model.columns.map((col) => (
                 <div key={col.key} className="compare-head">
-                  <div
-                    className="font-mono text-[12px] font-bold"
-                    style={{ color: 'var(--riscv-text)' }}
-                  >
-                    {col.label}
-                  </div>
-                  {col.sublabel && col.sublabel !== col.label && (
-                    <div className="text-[10px]" style={{ color: 'var(--riscv-text-3)' }}>
-                      {col.sublabel}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 pr-1">
+                      <div
+                        className="font-mono text-[13px] font-bold truncate"
+                        style={{ color: 'var(--riscv-text)' }}
+                      >
+                        {col.label}
+                      </div>
+                      {col.sublabel && col.sublabel !== col.label && (
+                        <div className="text-[11px] font-mono mt-0.5 truncate" style={{ color: 'var(--riscv-text-3)' }}>
+                          {col.sublabel}
+                        </div>
+                      )}
                     </div>
-                  )}
+                    {onRemoveItem && (
+                      <button
+                        type="button"
+                        onClick={() => onRemoveItem(model.kind, col.key)}
+                        title={`Remove ${col.label} from comparison`}
+                        aria-label={`Remove ${col.label} from comparison`}
+                        className="riscv-dock-chip-x p-1 shrink-0"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
 
@@ -291,8 +344,13 @@ export default function CompareView({
             </div>
 
             {rows.length === 0 && (
-              <div className="p-6 text-center text-[12px]" style={{ color: 'var(--riscv-text-3)' }}>
-                These items agree on every attribute.
+              <div className="p-12 text-center space-y-2">
+                <div className="text-sm font-semibold" style={{ color: 'var(--riscv-text-2)' }}>
+                  All attributes are identical
+                </div>
+                <div className="text-[12px]" style={{ color: 'var(--riscv-text-3)' }}>
+                  These items agree on every compared attribute. Toggle off "Differences only" to view the full specification.
+                </div>
               </div>
             )}
           </div>
