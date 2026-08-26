@@ -99,6 +99,46 @@ test('the UDB sync fails loudly when pointed somewhere wrong', () => {
   assert.match(stdout, /not found/i, 'it should say what it could not find');
 });
 
+test('the UDB sync captures the extension version, when a UDB checkout is available', (t) => {
+  // Skipped rather than failed when UDB is absent, matching the graph test
+  // below: contributors are not required to clone it.
+  const udb = path.resolve(root, '..', 'riscv-unified-db');
+  if (!fs.existsSync(path.join(udb, 'spec', 'std', 'isa', 'ext'))) {
+    t.skip('no riscv-unified-db checkout beside this repo');
+    return;
+  }
+
+  // The version was parsed and then dropped for a long time: pickVersion()
+  // already chose the right entry to read state and ratification_date from,
+  // and the number beside them went nowhere. Anything that has to pin an
+  // extension — an ACT4 DUB config, a profile, a report — had to re-derive it.
+  const before = hashCatalog();
+  const { status, stdout } = run('sync_udb_extensions.cjs', [udb, '--dry-run']);
+  assert.equal(status, 0, stdout);
+  assert.match(stdout, /--dry-run: catalogue not written/, 'dry-run should say so');
+  assert.equal(hashCatalog(), before, '--dry-run must not touch the catalogue');
+
+  // Asserts the pass runs and reports, not how many it wrote: the count is
+  // "gained a version", so it is large on a catalogue that has none and zero
+  // once the data is committed. Coverage of the committed catalogue is
+  // asserted in data-integrity.test.mjs, where the data lives.
+  assert.match(
+    stdout,
+    /Version pass: \d+ extension\(s\) gained a version/,
+    `the sync should report a version pass:\n${stdout}`
+  );
+});
+
+test('--dry-run leaves the UDB sync catalogue alone', () => {
+  // Guard on the guard, mirroring the instruction-sync test above: every
+  // assertion made through --dry-run depends on it really not writing.
+  const udb = path.resolve(root, '..', 'riscv-unified-db');
+  if (!fs.existsSync(path.join(udb, 'spec', 'std', 'isa', 'ext'))) return;
+  const before = hashCatalog();
+  run('sync_udb_extensions.cjs', [udb, '--dry-run']);
+  assert.equal(hashCatalog(), before);
+});
+
 test('the graph seeder fails loudly when pointed somewhere wrong', () => {
   const { status } = run('seed-dependency-graph.mjs', ['--check', '--udb', '/nonexistent-udb-path']);
   assert.equal(status, 1, 'a missing UDB checkout must be a failure');
