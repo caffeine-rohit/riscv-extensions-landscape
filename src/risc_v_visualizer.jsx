@@ -49,6 +49,7 @@ import WorkspacePanel from './WorkspacePanel.jsx';
 import ExtensionTile from './ExtensionTile.jsx';
 import EncodingDiagram from './EncodingDiagram.jsx';
 import { focusableWithin, nextFocus } from './focusTrap.js';
+import { computeLockedExtensions, missingMandatory } from './workspaceLock.js';
 import CompareTray from './CompareTray.jsx';
 import CompareView from './CompareView.jsx';
 import {
@@ -102,17 +103,71 @@ const BIT_MASK_32 = (1n << BIT_WIDTH) - 1n;
 const PERMALINK_PARAM = 'ext';
 const BUILDER_STORAGE_KEY = 'riscv-landscape-builder-state';
 
+/**
+ * Restore the builder from localStorage, validating rather than trusting.
+ *
+ * Everything here has been out of our hands since it was written: the payload
+ * may predate a catalogue sync that renamed an extension, predate a change to
+ * a profile's mandatory set, or simply have been edited by hand. A shape check
+ * alone let unknown ids and a non-object paramChoices flow into -march
+ * assembly, so each field is checked against live data and dropped if it no
+ * longer refers to anything.
+ *
+ * The reconciliation at the end matters most. `baselineLocked` was stored
+ * independently of `workspaceIds`, so a payload could come back claiming the
+ * profile floor was held while the selection had already lost a mandatory
+ * extension — the false-compliance state #214 exists to prevent, reachable
+ * through a reload rather than a click. When the two disagree we believe the
+ * extension set and release the lock, which tells the truth and leaves the
+ * user's configuration untouched; re-locking restores the floor as it always
+ * has.
+ */
 const loadSavedBuilderState = () => {
   if (typeof window === 'undefined') return null;
+  let parsed = null;
   try {
     const raw = window.localStorage.getItem(BUILDER_STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object') return parsed;
+    parsed = JSON.parse(raw);
   } catch {
-    /* storage unavailable */
+    /* storage unavailable or corrupt — start clean */
   }
-  return null;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+
+  const knownProfile = (name) =>
+    typeof name === 'string' && Object.hasOwn(PROFILES, name) ? name : null;
+
+  const catalogIds = new Set(allExtensionsFlat.map((ext) => ext.id));
+  const workspaceIds = Array.isArray(parsed.workspaceIds)
+    ? parsed.workspaceIds.filter((id) => catalogIds.has(id))
+    : [];
+
+  const paramChoices =
+    parsed.paramChoices && typeof parsed.paramChoices === 'object' && !Array.isArray(parsed.paramChoices)
+      ? parsed.paramChoices
+      : {};
+
+  let seedProfile = knownProfile(parsed.seedProfile);
+  let customFromProfile = knownProfile(parsed.customFromProfile);
+  let baselineLocked = typeof parsed.baselineLocked === 'boolean' ? parsed.baselineLocked : true;
+
+  if (seedProfile && baselineLocked) {
+    const missing = missingMandatory({ workspaceIds, seedProfile, profiles: PROFILES });
+    if (missing.length > 0) {
+      customFromProfile = seedProfile;
+      seedProfile = null;
+      baselineLocked = false;
+    }
+  }
+
+  return {
+    workspaceIds,
+    seedProfile,
+    customFromProfile,
+    paramChoices,
+    baselineLocked,
+    builderMode: typeof parsed.builderMode === 'boolean' ? parsed.builderMode : undefined,
+  };
 };
 
 const allExtensionsFlat = Object.values(extensions).flat().filter(Boolean);
@@ -655,12 +710,10 @@ const RISCVExplorer = () => {
     if (typeof savedBuilderState?.builderMode === 'boolean') return savedBuilderState.builderMode;
     return Boolean(savedBuilderState?.workspaceIds?.length);
   });
-  const [workspacePanelOpen, setWorkspacePanelOpen] = useState(() => {
-    if (typeof savedBuilderState?.workspacePanelOpen === 'boolean') {
-      return savedBuilderState.workspacePanelOpen;
-    }
-    return false;
-  });
+  // Deliberately not restored: see the persistence effect. The studio is a
+  // full-screen opaque overlay, so reopening it on load hid whatever the
+  // visitor had actually navigated to.
+  const [workspacePanelOpen, setWorkspacePanelOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = React.useRef(null);
   // Which profile seeded the workspace, so the panel can offer that profile's
@@ -692,7 +745,12 @@ const RISCVExplorer = () => {
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      if (workspaceIds.size === 0 && !workspacePanelOpen && !builderMode) {
+      // Nothing selected and the builder switched off means there is nothing
+      // worth remembering. The old condition also required the panel to be
+      // closed, but "Clear all" is only reachable from inside the open panel,
+      // so the explicit clear removed the key and this effect wrote it straight
+      // back on the same tick.
+      if (workspaceIds.size === 0 && !builderMode) {
         window.localStorage.removeItem(BUILDER_STORAGE_KEY);
       } else {
         window.localStorage.setItem(
@@ -703,8 +761,13 @@ const RISCVExplorer = () => {
             customFromProfile,
             paramChoices,
             baselineLocked,
-            workspacePanelOpen,
-            builderMode: builderMode || workspacePanelOpen || workspaceIds.size > 0,
+            // The configuration is worth restoring; "a full-screen modal was
+            // open" is not. Restoring that dropped returning visitors into an
+            // opaque overlay, hiding any ?ext= extension they had followed a
+            // link to. Note this is the real builderMode, not one widened by
+            // the panel being open, which used to switch the builder back on
+            // after the user had explicitly switched it off.
+            builderMode,
           }),
         );
       }
@@ -717,7 +780,6 @@ const RISCVExplorer = () => {
     customFromProfile,
     paramChoices,
     baselineLocked,
-    workspacePanelOpen,
     builderMode,
   ]);
 
@@ -759,34 +821,20 @@ const RISCVExplorer = () => {
   const [quickExportOpen, setQuickExportOpen] = useState(false);
   const [quickExportIncludeInstr, setQuickExportIncludeInstr] = useState(true);
 
-  // Smart lock: live reverse-lookup of dependencies
-  const lockedExtensions = React.useMemo(() => {
-    const locked = new Map(); // ext -> [things requiring it]
-
-    // The seeding profile is itself a reason an extension cannot be removed.
-    // Same map, same UI: tiles and the panel already refuse removal and name
-    // whatever holds a lock, so the floor needs no separate treatment.
-    if (seedProfile && baselineLocked) {
-      for (const id of PROFILES[seedProfile] || []) {
-        if (workspaceIds.has(id)) {
-          if (!locked.has(id)) locked.set(id, []);
-          locked.get(id).push(seedProfile);
-        }
-      }
-    }
-
-    const selected = Array.from(workspaceIds);
-    for (const ext of selected) {
-      const deps = SMART_DEPENDENCIES[ext] || [];
-      for (const dep of deps) {
-        if (workspaceIds.has(dep)) {
-          if (!locked.has(dep)) locked.set(dep, []);
-          locked.get(dep).push(ext);
-        }
-      }
-    }
-    return locked;
-  }, [workspaceIds, seedProfile, baselineLocked]);
+  // Smart lock: live reverse-lookup of dependencies, plus the seeding profile's
+  // mandatory floor. Derived through the shared helper so this display copy and
+  // the removal guard inside addWorkspaceIdsSmart cannot drift apart.
+  const lockedExtensions = React.useMemo(
+    () =>
+      computeLockedExtensions({
+        workspaceIds,
+        seedProfile,
+        baselineLocked,
+        smartDependencies: SMART_DEPENDENCIES,
+        profiles: PROFILES,
+      }),
+    [workspaceIds, seedProfile, baselineLocked],
+  );
 
   // Smart dependency and mutually-exclusive handler
   const addWorkspaceIdsSmart = React.useCallback(
@@ -796,18 +844,18 @@ const RISCVExplorer = () => {
         const autoAdded = [];
         let baseChanged = false;
 
-        // Recompute lock state against current `prev` state to ensure up-to-date checks during batch updates
-        const currentLocked = new Map();
-        const currentSelected = Array.from(prev);
-        for (const ext of currentSelected) {
-          const deps = SMART_DEPENDENCIES[ext] || [];
-          for (const dep of deps) {
-            if (prev.has(dep)) {
-              if (!currentLocked.has(dep)) currentLocked.set(dep, []);
-              currentLocked.get(dep).push(ext);
-            }
-          }
-        }
+        // Recompute lock state against `prev` rather than reading the memo, so
+        // batched updates check against what the set actually holds right now.
+        // Same helper as the memo: the profile floor is part of the answer here
+        // too, otherwise a tile could drop a mandatory extension while the
+        // header still claimed the configuration matched the profile.
+        const currentLocked = computeLockedExtensions({
+          workspaceIds: prev,
+          seedProfile,
+          baselineLocked,
+          smartDependencies: SMART_DEPENDENCIES,
+          profiles: PROFILES,
+        });
 
         const arrToAdd = Array.isArray(idsToAdd) ? idsToAdd : [idsToAdd];
 
@@ -877,7 +925,7 @@ const RISCVExplorer = () => {
         return next;
       });
     },
-    [showToast],
+    [showToast, seedProfile, baselineLocked],
   );
 
   // Flat list of all extensions — stable reference for workspace utilities
@@ -992,6 +1040,9 @@ const RISCVExplorer = () => {
   React.useEffect(() => {
     const handler = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        // The studio covers the page opaquely, so focusing the catalogue search
+        // behind it moved the caret somewhere the user cannot see.
+        if (workspacePanelOpen) return;
         e.preventDefault();
         searchInputRef.current?.focus();
         searchInputRef.current?.select();
@@ -999,7 +1050,7 @@ const RISCVExplorer = () => {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [workspacePanelOpen]);
 
   // ---------------------------------------------------------------------------
   // Extension Catalog – loaded from `src/riscv_extensions.json`
@@ -2402,6 +2453,8 @@ const RISCVExplorer = () => {
                                       setWorkspaceIds(new Set());
                                       addWorkspaceIdsSmart(list);
                                       setSeedProfile(name);
+                                      // A fresh profile load is a new origin.
+                                      setCustomFromProfile(null);
                                       setBaselineLocked(true);
                                       setProfileMenuOpen(false);
                                     }}
@@ -2458,6 +2511,11 @@ const RISCVExplorer = () => {
                                 onClick={() => {
                                   setWorkspaceIds(new Set());
                                   setSeedProfile(null);
+                                  // Origin tracking has to go too. Leaving it
+                                  // set made a fresh selection claim it was
+                                  // 'Custom (from RVA23)' — and that badge is
+                                  // persisted, so the lie survived a reload.
+                                  setCustomFromProfile(null);
                                   setParamChoices({});
                                   setBaselineLocked(true);
                                 }}
@@ -4986,41 +5044,35 @@ const RISCVExplorer = () => {
         }}
         onAddId={(id) => addWorkspaceIdsSmart(id, true)}
         onRemoveId={(id) => {
-          // Check if removing this ext would diverge from the seeding profile.
-          // We do this BEFORE the actual state update so we can act on it.
-          if (seedProfile) {
-            const mandatory = new Set(PROFILES[seedProfile] || []);
-            if (mandatory.has(id)) {
-              // The user is removing a mandatory extension — the result is
-              // no longer the profile. Downgrade to 'Custom (from X)' immediately.
-              setSeedProfile(null);
-              setCustomFromProfile(seedProfile);
-              setBaselineLocked(false); // lock no longer meaningful
-              showToast(
-                `${id} removed — configuration is now Custom (from ${seedProfile}). Re-select the profile from the switcher to restore full compliance.`,
-              );
-            }
+          // Decide before mutating anything. The previous order downgraded the
+          // profile first and only then discovered the removal was refused,
+          // which left the configuration permanently 'Custom' and the lock
+          // forced open while nothing had actually been removed.
+          if (lockedExtensions.has(id)) {
+            showToast(`Cannot remove ${id}: required by ${lockedExtensions.get(id).join(', ')}`);
+            return;
           }
+          if (!workspaceIds.has(id)) return;
+
+          // Reaching here means the removal will happen. A mandatory extension
+          // can only be unlocked, so this is the deliberate divergence path.
+          const divergesFromProfile = Boolean(
+            seedProfile && (PROFILES[seedProfile] || []).includes(id),
+          );
+
           setWorkspaceIds((prev) => {
             const next = new Set(prev);
-            // Dependency lock check (ISA graph deps, NOT profile baseline).
-            const currentLocked = new Map();
-            for (const ext of Array.from(prev)) {
-              const deps = SMART_DEPENDENCIES[ext] || [];
-              for (const dep of deps) {
-                if (prev.has(dep)) {
-                  if (!currentLocked.has(dep)) currentLocked.set(dep, []);
-                  currentLocked.get(dep).push(ext);
-                }
-              }
-            }
-            if (currentLocked.has(id)) {
-              showToast(`Cannot remove ${id}: required by ${currentLocked.get(id).join(', ')}`);
-              return prev; // return prev unchanged — already showed toast above too
-            }
             next.delete(id);
             return next;
           });
+
+          if (divergesFromProfile) {
+            setSeedProfile(null);
+            setCustomFromProfile(seedProfile);
+            showToast(
+              `${id} removed — configuration is now Custom (from ${seedProfile}). Re-select the profile from the switcher to restore full compliance.`,
+            );
+          }
         }}
         onClear={() => {
           setWorkspaceIds(new Set());

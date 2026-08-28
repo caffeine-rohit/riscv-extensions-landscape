@@ -45,6 +45,7 @@ import { buildIsaConfigYaml } from './exportUtils.js';
 import { resolveParams, impliedVlen, vlenExtension } from './isaGraph.js';
 import { PROFILES } from './profiles.js';
 import EncodingDiagram from './EncodingDiagram.jsx';
+import { focusableWithin, nextFocus } from './focusTrap.js';
 
 /**
  * Sort direction indicator for the catalog table header.
@@ -93,21 +94,77 @@ export default function WorkspacePanel({
 
   const marchInputRef = useRef(null);
 
-  // Close on Escape
+  // Close on Escape, innermost layer first. Every open popover has to be
+  // unwound before Escape reaches the studio itself — otherwise dismissing a
+  // dropdown tore down the whole builder along with it.
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        if (showExportOptions) {
-          setShowExportOptions(false);
-        } else {
-          onClose();
-        }
+      if (e.key !== 'Escape') return;
+      if (showExportOptions) {
+        setShowExportOptions(false);
+      } else if (profileDropdownOpen) {
+        setProfileDropdownOpen(false);
+      } else {
+        onClose();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose, showExportOptions]);
+  }, [open, onClose, showExportOptions, profileDropdownOpen]);
+
+  // The studio declares role="dialog" aria-modal="true" over an opaque
+  // full-screen backdrop, so it has to hold focus as well as take it —
+  // otherwise Tab walks into the page underneath, which is still focusable and
+  // now invisible. Same helpers the encoder dialog uses.
+  const dialogRef = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const opener = typeof document !== 'undefined' ? document.activeElement : null;
+
+    const onKeyDown = (e) => {
+      if (e.key !== 'Tab' || !dialogRef.current) return;
+      const target = nextFocus(
+        focusableWithin(dialogRef.current),
+        document.activeElement,
+        e.shiftKey,
+      );
+      if (target) {
+        e.preventDefault();
+        target.focus();
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown, true);
+    // Seed focus inside the dialog so the first Tab starts from within it.
+    focusableWithin(dialogRef.current)[0]?.focus();
+
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, true);
+      // Hand focus back to whatever opened the studio, so keyboard users
+      // resume where they left off rather than at the top of the document.
+      opener?.focus?.();
+    };
+  }, [open]);
+
+  // Dismiss the popovers on an outside click, the way the main view's own
+  // profile menu already does. Without this, Escape was the only way to close
+  // them — and Escape used to close the entire studio.
+  const profileDropdownRef = useRef(null);
+  const exportOptionsRef = useRef(null);
+  useEffect(() => {
+    if (!open || (!profileDropdownOpen && !showExportOptions)) return;
+    const onPointerDown = (e) => {
+      if (profileDropdownOpen && !profileDropdownRef.current?.contains(e.target)) {
+        setProfileDropdownOpen(false);
+      }
+      if (showExportOptions && !exportOptionsRef.current?.contains(e.target)) {
+        setShowExportOptions(false);
+      }
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [open, profileDropdownOpen, showExportOptions]);
 
   // Extensions the seeding profile lists as optional and that are not already in workspace
   const optionalToAdd = useMemo(() => {
@@ -235,6 +292,7 @@ export default function WorkspacePanel({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label="ISA Configuration Builder Studio"
@@ -393,7 +451,7 @@ export default function WorkspacePanel({
               </span>
 
               {/* Profile Badge / Switcher */}
-              <div style={{ position: 'relative' }}>
+              <div ref={profileDropdownRef} style={{ position: 'relative' }}>
                 <button
                   type="button"
                   onClick={() => setProfileDropdownOpen((v) => !v)}
@@ -515,7 +573,7 @@ export default function WorkspacePanel({
         {/* Right Actions: Export YAML, Clear all, Close */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           {!isEmpty && (
-            <div style={{ position: 'relative' }}>
+            <div ref={exportOptionsRef} style={{ position: 'relative' }}>
               <button
                 type="button"
                 onClick={() => setShowExportOptions(!showExportOptions)}
@@ -2065,7 +2123,7 @@ export default function WorkspacePanel({
                           row={row}
                           isEven={i % 2 === 0}
                           isHovered={hoveredRow === row.key}
-                          isSelected={selectedRowInstruction?.mnemonic === row.mnemonic}
+                          isSelected={selectedRowInstruction?.key === row.key}
                           onHover={setHoveredRow}
                           onSelect={(instr) => {
                             setSelectedRowInstruction(instr);
@@ -2478,6 +2536,10 @@ function CatalogRowInner({ row, isEven, isHovered, isSelected, onHover, onSelect
       onMouseLeave={() => onHover(null)}
       onClick={() =>
         onSelect({
+          // Carries the row's unique key so selection can identify this exact
+          // row. The catalog deduplicates by mnemonic AND encoding, so the
+          // mnemonic alone does not identify a row.
+          key: row.key,
           extId: row.sources[0].extId,
           mnemonic: row.mnemonic,
           encoding: row.encoding,
