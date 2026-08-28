@@ -32,8 +32,10 @@ import {
 import { PROFILES } from '../src/profiles.js';
 import { buildIsaConfigYaml } from '../src/exportUtils.js';
 
+import { fileURLToPath } from 'node:url';
+
 const catalogIds = (() => {
-  const file = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'src', 'riscv_extensions.json');
+  const file = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'riscv_extensions.json');
   const catalog = JSON.parse(fs.readFileSync(file, 'utf8'));
   const ids = [];
   for (const group of Object.values(catalog)) {
@@ -455,7 +457,7 @@ test('a chosen oneOf value reaches the exported configuration', () => {
   const ids = ['RV64I', 'Za64rs', 'Zic64b'];
   const picked = 'reserve naturally-aligned 64-byte region';
   const catalog = JSON.parse(
-    fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'src', 'riscv_extensions.json'), 'utf8'),
+    fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'riscv_extensions.json'), 'utf8'),
   );
   const allExts = Object.values(catalog).flat();
 

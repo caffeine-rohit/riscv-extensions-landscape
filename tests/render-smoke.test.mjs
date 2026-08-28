@@ -22,7 +22,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
 
-const here = path.dirname(new URL(import.meta.url).pathname);
+import { fileURLToPath } from 'node:url';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
 const dist = path.join(here, '..', 'dist');
 const bundlePath = path.join(dist, 'bundle.js');
 

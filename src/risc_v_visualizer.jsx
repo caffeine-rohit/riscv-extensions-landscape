@@ -100,6 +100,20 @@ const BIT_MASK_32 = (1n << BIT_WIDTH) - 1n;
  * index.html. ?ext=Zba needs no server cooperation at all.
  */
 const PERMALINK_PARAM = 'ext';
+const BUILDER_STORAGE_KEY = 'riscv-landscape-builder-state';
+
+const loadSavedBuilderState = () => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(BUILDER_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') return parsed;
+  } catch {
+    /* storage unavailable */
+  }
+  return null;
+};
 
 const allExtensionsFlat = Object.values(extensions).flat().filter(Boolean);
 
@@ -548,8 +562,15 @@ const RISCVExplorer = () => {
       }
     };
   }, [instructionExpandOpen]);
+  const savedBuilderState = React.useMemo(() => loadSavedBuilderState(), []);
+
   // ── ISA Workspace state ────────────────────────────────────────────────────
-  const [workspaceIds, setWorkspaceIds] = useState(new Set());
+  const [workspaceIds, setWorkspaceIds] = useState(() => {
+    if (savedBuilderState?.workspaceIds && Array.isArray(savedBuilderState.workspaceIds)) {
+      return new Set(savedBuilderState.workspaceIds);
+    }
+    return new Set();
+  });
   const [workspaceNotice, setWorkspaceNotice] = useState(null);
   const toastTimerRef = React.useRef(null);
   const showToast = React.useCallback((msg) => {
@@ -630,24 +651,76 @@ const RISCVExplorer = () => {
     }
   }, [theme]);
 
-  const [builderMode, setBuilderMode] = useState(false);
-  const [workspacePanelOpen, setWorkspacePanelOpen] = useState(false);
+  const [builderMode, setBuilderMode] = useState(() => {
+    if (typeof savedBuilderState?.builderMode === 'boolean') return savedBuilderState.builderMode;
+    return Boolean(savedBuilderState?.workspaceIds?.length);
+  });
+  const [workspacePanelOpen, setWorkspacePanelOpen] = useState(() => {
+    if (typeof savedBuilderState?.workspacePanelOpen === 'boolean') {
+      return savedBuilderState.workspacePanelOpen;
+    }
+    return false;
+  });
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = React.useRef(null);
   // Which profile seeded the workspace, so the panel can offer that profile's
-  // optional extensions (#217). Null once the workspace is cleared: the offer
-  // only makes sense while the configuration still descends from the profile.
-  const [seedProfile, setSeedProfile] = useState(null);
+  // optional extensions (#217). Set to null when the workspace is cleared OR
+  // when the user removes a mandatory extension (diverging from the spec).
+  // In that case customFromProfile holds the origin name for the 'Custom (from X)' badge.
+  const [seedProfile, setSeedProfile] = useState(() => savedBuilderState?.seedProfile ?? null);
+  // When a user releases the lock and removes mandatory extensions, seedProfile
+  // becomes null (the config is no longer that profile), but we remember where
+  // it came from so the header can show 'Custom (from RVA23)' and the profile
+  // switcher can offer an easy way to restore.
+  const [customFromProfile, setCustomFromProfile] = useState(
+    () => savedBuilderState?.customFromProfile ?? null,
+  );
   // Chosen values for oneOf parameters (#216). Only oneOf leaves a decision
   // open — equal and includes are pinned by whichever extension asks for them —
   // so this holds the handful of genuine choices, keyed by parameter name.
-  const [paramChoices, setParamChoices] = useState({});
+  const [paramChoices, setParamChoices] = useState(() => savedBuilderState?.paramChoices ?? {});
   // Whether the seeding profile's mandatory set is held in place (#214).
   // Certification work needs a floor that cannot be silently reverted — dropping
   // H from RVA23 leaves something that is no longer RVA23 — but exploring what a
   // profile would be without one of its extensions is also legitimate, so the
   // floor is releasable rather than absolute.
-  const [baselineLocked, setBaselineLocked] = useState(true);
+  const [baselineLocked, setBaselineLocked] = useState(
+    () => savedBuilderState?.baselineLocked ?? true,
+  );
+
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      if (workspaceIds.size === 0 && !workspacePanelOpen && !builderMode) {
+        window.localStorage.removeItem(BUILDER_STORAGE_KEY);
+      } else {
+        window.localStorage.setItem(
+          BUILDER_STORAGE_KEY,
+          JSON.stringify({
+            workspaceIds: Array.from(workspaceIds),
+            seedProfile,
+            customFromProfile,
+            paramChoices,
+            baselineLocked,
+            workspacePanelOpen,
+            builderMode: builderMode || workspacePanelOpen || workspaceIds.size > 0,
+          }),
+        );
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [
+    workspaceIds,
+    seedProfile,
+    customFromProfile,
+    paramChoices,
+    baselineLocked,
+    workspacePanelOpen,
+    builderMode,
+  ]);
+
   const handleSetParam = React.useCallback((name, value) => {
     setParamChoices((prev) => {
       const next = { ...prev };
@@ -1052,8 +1125,8 @@ const RISCVExplorer = () => {
     Boolean(standardEquivalentMnemonic) && instructionIndex.get(standardEquivalentMnemonic)?.length;
   const compressedEquivalents = selectedInstruction
     ? (COMPRESSED_BY_STANDARD[normalizeMnemonicKey(selectedInstruction.mnemonic)] || []).filter(
-        (entry) => instructionIndex.has(normalizeMnemonicKey(entry.mnemonic)),
-      )
+      (entry) => instructionIndex.has(normalizeMnemonicKey(entry.mnemonic)),
+    )
     : [];
 
   const formatInstructionForClipboard = React.useCallback((ext, instr) => {
@@ -1923,14 +1996,18 @@ const RISCVExplorer = () => {
                 className="riscv-usage mt-3 mb-1 text-[12.5px] leading-relaxed"
                 style={{ color: 'var(--riscv-text-2)', maxWidth: '76ch' }}
               >
-                Browse every ratified RISC-V extension, its instructions and their
-                encodings.{' '}
+                Browse every ratified RISC-V extension, its instructions and their encodings.{' '}
                 <span style={{ color: 'var(--riscv-text-3)' }}>
-                  Select a tile for details, filter by profile or manual volume, and
-                  turn on <strong style={{ color: 'var(--riscv-text-2)', fontWeight: 600 }}>ISA Builder</strong>{' '}
+                  Select a tile for details, filter by profile or manual volume, and turn on{' '}
+                  <strong style={{ color: 'var(--riscv-text-2)', fontWeight: 600 }}>
+                    ISA Builder
+                  </strong>{' '}
                   to assemble a configuration and get a validated{' '}
-                  <code style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.95em' }}>-march</code>{' '}
-                  string. <strong style={{ color: 'var(--riscv-text-2)', fontWeight: 600 }}>Compare</strong>{' '}
+                  <code style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.95em' }}>
+                    -march
+                  </code>{' '}
+                  string.{' '}
+                  <strong style={{ color: 'var(--riscv-text-2)', fontWeight: 600 }}>Compare</strong>{' '}
                   puts extensions, instructions or profiles side by side.
                 </span>
               </p>
@@ -2018,7 +2095,10 @@ const RISCVExplorer = () => {
                                     : `Pin ${profile} to comparison`
                                 }
                               >
-                                <GitCompare size={9} strokeWidth={compareProfileNames.has(profile) ? 2.5 : 2} />
+                                <GitCompare
+                                  size={9}
+                                  strokeWidth={compareProfileNames.has(profile) ? 2.5 : 2}
+                                />
                               </button>
                             )}
                           </span>
@@ -2131,16 +2211,16 @@ const RISCVExplorer = () => {
                     style={
                       compareMode
                         ? {
-                            background: 'var(--riscv-violet)',
-                            color: '#ffffff',
-                            boxShadow: '0 4px 18px rgba(139,124,248,0.35)',
-                            border: '1px solid var(--riscv-violet)',
-                          }
+                          background: 'var(--riscv-violet)',
+                          color: '#ffffff',
+                          boxShadow: '0 4px 18px rgba(139,124,248,0.35)',
+                          border: '1px solid var(--riscv-violet)',
+                        }
                         : {
-                            background: 'var(--riscv-surface)',
-                            color: 'var(--riscv-violet)',
-                            border: '1px solid rgba(139,124,248,0.35)',
-                          }
+                          background: 'var(--riscv-surface)',
+                          color: 'var(--riscv-violet)',
+                          border: '1px solid rgba(139,124,248,0.35)',
+                        }
                     }
                     data-tooltip={
                       compareMode
@@ -2155,19 +2235,19 @@ const RISCVExplorer = () => {
                       style={
                         compareMode
                           ? {
-                              background: 'rgba(0,0,0,0.25)',
-                              color: '#ffffff',
-                            }
+                            background: 'rgba(0,0,0,0.25)',
+                            color: '#ffffff',
+                          }
                           : comparePinnedTotal > 0
                             ? {
-                                background: 'var(--riscv-violet-dim)',
-                                color: 'var(--riscv-violet)',
-                                border: '1px solid rgba(139,124,248,0.3)',
-                              }
+                              background: 'var(--riscv-violet-dim)',
+                              color: 'var(--riscv-violet)',
+                              border: '1px solid rgba(139,124,248,0.3)',
+                            }
                             : {
-                                background: 'var(--riscv-tint-3)',
-                                color: 'var(--riscv-text-3)',
-                              }
+                              background: 'var(--riscv-tint-3)',
+                              color: 'var(--riscv-text-3)',
+                            }
                       }
                     >
                       {comparePinnedTotal > 0 ? comparePinnedTotal : compareMode ? 'ON' : 'OFF'}
@@ -2269,11 +2349,10 @@ const RISCVExplorer = () => {
                               type="button"
                               onClick={() => setProfileMenuOpen((v) => !v)}
                               data-tooltip="Start the configuration from a ratified profile"
-                              className={`builder-action-indigo w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold transition-all duration-300 rounded-lg ${
-                                profileMenuOpen
+                              className={`builder-action-indigo w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold transition-all duration-300 rounded-lg ${profileMenuOpen
                                   ? 'bg-indigo-500 text-white shadow-inner'
                                   : 'text-indigo-300 hover:bg-indigo-500/30 hover:text-indigo-100 hover:shadow-[0_0_12px_rgba(99,102,241,0.3)]'
-                              }`}
+                                }`}
                             >
                               <Layers size={14} className="transition-transform hover:scale-110" />
                               {workspaceIds.size === 0 && (
@@ -2396,11 +2475,10 @@ const RISCVExplorer = () => {
                                   data-tooltip="Export configuration YAML"
                                   aria-label="Export configuration YAML"
                                   onClick={() => setQuickExportOpen((v) => !v)}
-                                  className={`builder-action-emerald w-full flex items-center justify-center py-1.5 transition-all duration-300 rounded-lg ${
-                                    quickExportOpen
+                                  className={`builder-action-emerald w-full flex items-center justify-center py-1.5 transition-all duration-300 rounded-lg ${quickExportOpen
                                       ? 'bg-emerald-500 text-white shadow-inner'
                                       : 'text-emerald-300 hover:bg-emerald-500/30 hover:text-emerald-100 hover:shadow-[0_0_12px_rgba(16,185,129,0.3)]'
-                                  }`}
+                                    }`}
                                 >
                                   <Download
                                     size={14}
@@ -3298,15 +3376,15 @@ const RISCVExplorer = () => {
                               : 'Status unconfirmed';
                           const tip = ratified
                             ? // Deliberately does not name a source. Most states
-                              // are synced from riscv-unified-db, but not all:
-                              // UDB has no E extension and no RV128, so RV32E,
-                              // RV64E and RV128I carry states set here against
-                              // the specification itself. Crediting UDB for
-                              // those would be a false claim about provenance —
-                              // the same mistake as RV128I inheriting I's
-                              // ratification. The linked chapter is the source
-                              // a reader can actually check.
-                              'Ratified — see the linked specification chapter'
+                            // are synced from riscv-unified-db, but not all:
+                            // UDB has no E extension and no RV128, so RV32E,
+                            // RV64E and RV128I carry states set here against
+                            // the specification itself. Crediting UDB for
+                            // those would be a false claim about provenance —
+                            // the same mistake as RV128I inheriting I's
+                            // ratification. The linked chapter is the source
+                            // a reader can actually check.
+                            'Ratified — see the linked specification chapter'
                             : state
                               ? `Reported as ${state}; see the linked specification chapter`
                               : 'Neither riscv-unified-db nor riscv-opcodes describes this extension, so its status could not be confirmed';
@@ -3317,15 +3395,15 @@ const RISCVExplorer = () => {
                               style={
                                 ratified
                                   ? {
-                                      background: 'var(--riscv-check-fill)',
-                                      color: 'var(--riscv-check)',
-                                      borderColor: 'var(--riscv-check-edge)',
-                                    }
+                                    background: 'var(--riscv-check-fill)',
+                                    color: 'var(--riscv-check)',
+                                    borderColor: 'var(--riscv-check-edge)',
+                                  }
                                   : {
-                                      background: 'var(--riscv-gold-dim)',
-                                      color: 'var(--riscv-gold)',
-                                      borderColor: 'rgba(245,197,66,0.35)',
-                                    }
+                                    background: 'var(--riscv-gold-dim)',
+                                    color: 'var(--riscv-gold)',
+                                    borderColor: 'rgba(245,197,66,0.35)',
+                                  }
                               }
                             >
                               {label}
@@ -3489,8 +3567,7 @@ const RISCVExplorer = () => {
                                         return { ...current, index: idx };
                                       });
                                     }}
-                                    className={`px-1.5 py-0.5 rounded-l border text-[11px] font-mono tracking-tight ${
-                                      isActive
+                                    className={`px-1.5 py-0.5 rounded-l border text-[11px] font-mono tracking-tight ${isActive
                                         ? isDeprecated
                                           ? 'border-red-400 bg-red-500/10 text-red-200'
                                           : 'border-emerald-400 bg-emerald-500/10 text-emerald-200'
@@ -3499,7 +3576,7 @@ const RISCVExplorer = () => {
                                           : isDeprecated
                                             ? 'border-red-500/60 bg-red-500/5 text-red-200'
                                             : 'border-slate-700 bg-slate-800/70'
-                                    }`}
+                                      }`}
                                     title={
                                       isClickable
                                         ? `View details for ${mnemonic}`
@@ -3619,17 +3696,22 @@ const RISCVExplorer = () => {
                                     style={
                                       isPinned
                                         ? {
-                                            background: 'var(--riscv-violet-dim)',
-                                            color: 'var(--riscv-violet)',
-                                            borderColor: 'rgba(139, 124, 248, 0.4)',
-                                          }
+                                          background: 'var(--riscv-violet-dim)',
+                                          color: 'var(--riscv-violet)',
+                                          borderColor: 'rgba(139, 124, 248, 0.4)',
+                                        }
                                         : undefined
                                     }
                                     onClick={() => {
-                                      toggleCompareInstruction(selectedExt.id, selectedInstruction.mnemonic);
+                                      toggleCompareInstruction(
+                                        selectedExt.id,
+                                        selectedInstruction.mnemonic,
+                                      );
                                       if (!compareMode) setCompareMode(true);
                                     }}
-                                    data-tooltip={isPinned ? 'Remove from comparison' : 'Pin to comparison'}
+                                    data-tooltip={
+                                      isPinned ? 'Remove from comparison' : 'Pin to comparison'
+                                    }
                                   >
                                     <GitCompare
                                       size={12}
@@ -3735,14 +3817,13 @@ const RISCVExplorer = () => {
                                   Match
                                 </div>
                                 <div
-                                  className={`font-mono text-[12px] text-slate-100 bg-slate-800/70 border rounded px-2 py-1 ${
-                                    searchQuery.trim().length &&
-                                    String(selectedInstruction.match || '')
-                                      .toLowerCase()
-                                      .includes(searchQuery.trim().toLowerCase())
+                                  className={`font-mono text-[12px] text-slate-100 bg-slate-800/70 border rounded px-2 py-1 ${searchQuery.trim().length &&
+                                      String(selectedInstruction.match || '')
+                                        .toLowerCase()
+                                        .includes(searchQuery.trim().toLowerCase())
                                       ? 'border-yellow-400 bg-yellow-500/10'
                                       : 'border-slate-700'
-                                  }`}
+                                    }`}
                                 >
                                   {selectedInstruction.match}
                                 </div>
@@ -3752,14 +3833,13 @@ const RISCVExplorer = () => {
                                   Mask
                                 </div>
                                 <div
-                                  className={`font-mono text-[12px] text-slate-100 bg-slate-800/70 border rounded px-2 py-1 ${
-                                    searchQuery.trim().length &&
-                                    String(selectedInstruction.mask || '')
-                                      .toLowerCase()
-                                      .includes(searchQuery.trim().toLowerCase())
+                                  className={`font-mono text-[12px] text-slate-100 bg-slate-800/70 border rounded px-2 py-1 ${searchQuery.trim().length &&
+                                      String(selectedInstruction.mask || '')
+                                        .toLowerCase()
+                                        .includes(searchQuery.trim().toLowerCase())
                                       ? 'border-yellow-400 bg-yellow-500/10'
                                       : 'border-slate-700'
-                                  }`}
+                                    }`}
                                 >
                                   {selectedInstruction.mask}
                                 </div>
@@ -3876,11 +3956,10 @@ const RISCVExplorer = () => {
                         <div
                           className={`
                       mt-4 p-3 rounded text-xs flex items-center gap-2 border
-                      ${
-                        isHighlighted(selectedExt.id)
-                          ? 'bg-yellow-900/20 border-yellow-700/30 text-yellow-200'
-                          : 'bg-slate-800 border-slate-700 text-slate-500'
-                      }
+                      ${isHighlighted(selectedExt.id)
+                              ? 'bg-yellow-900/20 border-yellow-700/30 text-yellow-200'
+                              : 'bg-slate-800 border-slate-700 text-slate-500'
+                            }
                     `}
                         >
                           {isHighlighted(selectedExt.id) ? (
@@ -4395,7 +4474,6 @@ const RISCVExplorer = () => {
               style={{ boxShadow: '0 0 80px rgba(0,0,0,0.9), 0 0 0 1px rgba(245,197,66,0.12)' }}
               onClick={(e) => e.stopPropagation()}
             >
-
               {/* ── Modal Header ── */}
               <div
                 className="p-5 flex items-start justify-between gap-4"
@@ -4437,7 +4515,10 @@ const RISCVExplorer = () => {
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 flex-wrap" style={{ marginLeft: '2.1rem' }}>
+                  <div
+                    className="flex items-center gap-2 flex-wrap"
+                    style={{ marginLeft: '2.1rem' }}
+                  >
                     <a
                       href={selectedExt.url || 'https://github.com/riscv/riscv-isa-manual'}
                       target="_blank"
@@ -4472,10 +4553,10 @@ const RISCVExplorer = () => {
                         style={
                           isPinned
                             ? {
-                                background: 'var(--riscv-violet-dim)',
-                                color: 'var(--riscv-violet)',
-                                borderColor: 'rgba(139, 124, 248, 0.4)',
-                              }
+                              background: 'var(--riscv-violet-dim)',
+                              color: 'var(--riscv-violet)',
+                              borderColor: 'rgba(139, 124, 248, 0.4)',
+                            }
                             : undefined
                         }
                         onClick={() => {
@@ -4503,7 +4584,8 @@ const RISCVExplorer = () => {
                       const ok = await copyTextToClipboard(text);
                       setCopyStatus(ok ? 'copied' : 'failed');
                       if (ok) showToast('Copied instruction details!');
-                      if (copyStatusTimerRef.current) window.clearTimeout(copyStatusTimerRef.current);
+                      if (copyStatusTimerRef.current)
+                        window.clearTimeout(copyStatusTimerRef.current);
                       copyStatusTimerRef.current = window.setTimeout(() => {
                         copyStatusTimerRef.current = null;
                         setCopyStatus(null);
@@ -4512,7 +4594,11 @@ const RISCVExplorer = () => {
                     data-tooltip="Copy extension + instruction details"
                   >
                     <Copy size={13} />
-                    {copyStatus === 'copied' ? 'Copied!' : copyStatus === 'failed' ? 'Failed' : 'Copy'}
+                    {copyStatus === 'copied'
+                      ? 'Copied!'
+                      : copyStatus === 'failed'
+                        ? 'Failed'
+                        : 'Copy'}
                   </button>
                   <button
                     type="button"
@@ -4527,8 +4613,10 @@ const RISCVExplorer = () => {
               </div>
 
               {/* ── Modal Body ── */}
-              <div className="p-5 space-y-6 overflow-y-auto" style={{ maxHeight: 'calc(90vh - 100px)' }}>
-
+              <div
+                className="p-5 space-y-6 overflow-y-auto"
+                style={{ maxHeight: 'calc(90vh - 100px)' }}
+              >
                 {/* ── Encoding Diagram — full width, no scroll on wide screens ── */}
                 <div>
                   <div
@@ -4564,14 +4652,13 @@ const RISCVExplorer = () => {
                         Match
                       </div>
                       <div
-                        className={`font-mono text-[14px] px-4 py-3 rounded-lg border flex items-center justify-between group ${
-                          searchQuery.trim().length &&
-                          String(selectedInstruction.match || '')
-                            .toLowerCase()
-                            .includes(searchQuery.trim().toLowerCase())
+                        className={`font-mono text-[14px] px-4 py-3 rounded-lg border flex items-center justify-between group ${searchQuery.trim().length &&
+                            String(selectedInstruction.match || '')
+                              .toLowerCase()
+                              .includes(searchQuery.trim().toLowerCase())
                             ? 'border-yellow-400 bg-yellow-500/10 text-yellow-200'
                             : 'border-slate-700 bg-slate-800/70 text-slate-100'
-                        }`}
+                          }`}
                       >
                         <span>{selectedInstruction.match || '—'}</span>
                         {selectedInstruction.match && (
@@ -4597,14 +4684,13 @@ const RISCVExplorer = () => {
                         Mask
                       </div>
                       <div
-                        className={`font-mono text-[14px] px-4 py-3 rounded-lg border flex items-center justify-between group ${
-                          searchQuery.trim().length &&
-                          String(selectedInstruction.mask || '')
-                            .toLowerCase()
-                            .includes(searchQuery.trim().toLowerCase())
+                        className={`font-mono text-[14px] px-4 py-3 rounded-lg border flex items-center justify-between group ${searchQuery.trim().length &&
+                            String(selectedInstruction.mask || '')
+                              .toLowerCase()
+                              .includes(searchQuery.trim().toLowerCase())
                             ? 'border-yellow-400 bg-yellow-500/10 text-yellow-200'
                             : 'border-slate-700 bg-slate-800/70 text-slate-100'
-                        }`}
+                          }`}
                       >
                         <span>{selectedInstruction.mask || '—'}</span>
                         {selectedInstruction.mask && (
@@ -4688,9 +4774,7 @@ const RISCVExplorer = () => {
                       background: 'rgba(34,211,238,0.04)',
                     }}
                   >
-                    <div
-                      className="text-[11px] uppercase tracking-widest font-semibold mb-4 text-cyan-400"
-                    >
+                    <div className="text-[11px] uppercase tracking-widest font-semibold mb-4 text-cyan-400">
                       Compressed Mapping
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -4722,7 +4806,10 @@ const RISCVExplorer = () => {
                             data-tooltip="Open standard instruction details"
                           >
                             <span>{compressedMapping.standard}</span>
-                            <ArrowUpRight size={14} className="opacity-0 group-hover:opacity-70 shrink-0 transition-opacity" />
+                            <ArrowUpRight
+                              size={14}
+                              className="opacity-0 group-hover:opacity-70 shrink-0 transition-opacity"
+                            />
                           </button>
                         ) : (
                           <div className="font-mono text-[13px] text-slate-100 bg-slate-800/70 border border-slate-700 rounded-lg px-3 py-2">
@@ -4831,10 +4918,9 @@ const RISCVExplorer = () => {
                   <div
                     className={`
                       mt-2 p-4 rounded-xl flex items-center gap-3 border text-[13px]
-                      ${
-                        isHighlighted(selectedExt.id)
-                          ? 'bg-yellow-900/20 border-yellow-700/30 text-yellow-200'
-                          : 'bg-slate-800/50 border-slate-700/50 text-slate-400'
+                      ${isHighlighted(selectedExt.id)
+                        ? 'bg-yellow-900/20 border-yellow-700/30 text-yellow-200'
+                        : 'bg-slate-800/50 border-slate-700/50 text-slate-400'
                       }
                     `}
                   >
@@ -4858,7 +4944,6 @@ const RISCVExplorer = () => {
                     )}
                   </div>
                 )}
-
               </div>
             </div>
           </div>
@@ -4878,12 +4963,47 @@ const RISCVExplorer = () => {
         paramChoices={paramChoices}
         onSetParam={handleSetParam}
         baselineLocked={baselineLocked}
-        onToggleBaseline={() => setBaselineLocked((v) => !v)}
+        customFromProfile={customFromProfile}
+        onToggleBaseline={() => {
+          if (baselineLocked) {
+            // Releasing the lock: just release it
+            setBaselineLocked(false);
+          } else {
+            // Re-locking: restore any missing mandatory extensions first,
+            // so the locked state is always a genuinely compliant configuration.
+            if (seedProfile) {
+              const mandatory = PROFILES[seedProfile] || [];
+              const missing = mandatory.filter((id) => !workspaceIds.has(id));
+              if (missing.length > 0) {
+                addWorkspaceIdsSmart(missing);
+                showToast(
+                  `Re-locked ${seedProfile}: restored ${missing.join(', ')} to the mandatory set.`,
+                );
+              }
+            }
+            setBaselineLocked(true);
+          }
+        }}
         onAddId={(id) => addWorkspaceIdsSmart(id, true)}
-        onRemoveId={(id) =>
+        onRemoveId={(id) => {
+          // Check if removing this ext would diverge from the seeding profile.
+          // We do this BEFORE the actual state update so we can act on it.
+          if (seedProfile) {
+            const mandatory = new Set(PROFILES[seedProfile] || []);
+            if (mandatory.has(id)) {
+              // The user is removing a mandatory extension — the result is
+              // no longer the profile. Downgrade to 'Custom (from X)' immediately.
+              setSeedProfile(null);
+              setCustomFromProfile(seedProfile);
+              setBaselineLocked(false); // lock no longer meaningful
+              showToast(
+                `${id} removed — configuration is now Custom (from ${seedProfile}). Re-select the profile from the switcher to restore full compliance.`,
+              );
+            }
+          }
           setWorkspaceIds((prev) => {
             const next = new Set(prev);
-            // Lock check inside panel removal as well
+            // Dependency lock check (ISA graph deps, NOT profile baseline).
             const currentLocked = new Map();
             for (const ext of Array.from(prev)) {
               const deps = SMART_DEPENDENCIES[ext] || [];
@@ -4896,21 +5016,30 @@ const RISCVExplorer = () => {
             }
             if (currentLocked.has(id)) {
               showToast(`Cannot remove ${id}: required by ${currentLocked.get(id).join(', ')}`);
-              return next;
+              return prev; // return prev unchanged — already showed toast above too
             }
             next.delete(id);
             return next;
-          })
-        }
+          });
+        }}
         onClear={() => {
           setWorkspaceIds(new Set());
           setSeedProfile(null);
+          setCustomFromProfile(null);
           setParamChoices({});
           setBaselineLocked(true);
+          try {
+            window.localStorage.removeItem(BUILDER_STORAGE_KEY);
+          } catch {
+            /* ignore */
+          }
         }}
-        onLoadIds={(ids) => {
+        onLoadIds={(ids, profileName) => {
           setWorkspaceIds(new Set()); // clear
           addWorkspaceIdsSmart(ids); // smartly add all
+          setSeedProfile(profileName || null);
+          setCustomFromProfile(null); // fresh load resets origin tracking
+          setBaselineLocked(true);
         }}
         onSelectInstruction={({ extId, mnemonic, encoding, variable_fields, match, mask }) => {
           // Navigate the main view to the specified extension + instruction
