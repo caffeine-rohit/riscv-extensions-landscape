@@ -1129,9 +1129,7 @@ export default function WorkspacePanel({
                       marginBottom: 12,
                       padding: '8px 12px',
                       borderRadius: 8,
-                      background: baselineLocked
-                        ? 'rgba(245,197,66,0.06)'
-                        : 'var(--riscv-tint-1)',
+                      background: baselineLocked ? 'rgba(245,197,66,0.06)' : 'var(--riscv-tint-1)',
                       border: `1px solid ${
                         baselineLocked ? 'rgba(245,197,66,0.2)' : 'var(--riscv-tint-3)'
                       }`,
@@ -1206,10 +1204,9 @@ export default function WorkspacePanel({
                     />
                     <span style={{ fontSize: 11, color: 'var(--riscv-text-2)', lineHeight: 1.45 }}>
                       This configuration has diverged from{' '}
-                      <strong style={{ color: '#f59e0b' }}>{customFromProfile}</strong> — one or more
-                      mandatory extensions were removed. To restore full{' '}
-                      {customFromProfile} compliance, use the{' '}
-                      <strong>Profile switcher</strong> above to reload it.
+                      <strong style={{ color: '#f59e0b' }}>{customFromProfile}</strong> — one or
+                      more mandatory extensions were removed. To restore full {customFromProfile}{' '}
+                      compliance, use the <strong>Profile switcher</strong> above to reload it.
                     </span>
                   </div>
                 )}
