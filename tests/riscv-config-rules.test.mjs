@@ -20,11 +20,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { closure, resolveSelection } from '../src/isaGraph.js';
 import { buildMarchString, SHORTHAND_BUNDLES } from '../src/marchUtils.js';
 
 const ALL = (() => {
-  const file = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'src', 'riscv_extensions.json');
+  const file = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'riscv_extensions.json');
   return Object.values(JSON.parse(fs.readFileSync(file, 'utf8'))).flat().filter(Boolean);
 })();
 const CATALOG_IDS = new Set(ALL.map((e) => e.id));
