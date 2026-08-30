@@ -76,6 +76,7 @@ import { resolveSelection } from './isaGraph.js';
 import { PROFILES } from './profiles.js';
 import PROFILE_OPTIONAL from './profile-optional.json';
 import { buildIsaConfigYaml } from './exportUtils.js';
+import AskAiLauncher from './AskAiLauncher.jsx';
 
 // Ids the catalog can actually render. The dependency graph carries a few nodes
 // the catalog does not (UDB's S requires Sm, for which we have no entry), and
@@ -5111,6 +5112,9 @@ const RISCVExplorer = () => {
           }
         }}
       />
+
+      {/* ── Ask AI Launcher ── */}
+      <AskAiLauncher />
 
       {/* ── Workspace Notices Toast ── */}
       <div

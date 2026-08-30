@@ -16,7 +16,7 @@
  * page render and did anything throw", which is exactly the class of failure
  * that slipped through.
  */
-import { test, before } from 'node:test';
+import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -133,8 +133,20 @@ async function mountAt(url) {
   });
   win.window.eval(fs.readFileSync(bundlePath, 'utf8'));
   await new Promise((resolve) => setTimeout(resolve, 400));
+  mounted.push(win);
   return { dom: win, errors };
 }
+
+/*
+ * Each mount leaves a live jsdom window behind, and anything the app scheduled
+ * inside it keeps running. A component that polls on an interval therefore
+ * holds the event loop open and this file hangs instead of finishing. Close
+ * them once the suite is done so a timer cannot outlive the test that made it.
+ */
+const mounted = [];
+after(() => {
+  for (const win of mounted) win.window.close();
+});
 
 const compareDialog = (d) =>
   d.window.document.querySelector('[role="dialog"][aria-labelledby="compare-view-title"]');

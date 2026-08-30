@@ -47,6 +47,12 @@ module.exports = (env, argv = {}) => {
         {
           test: /\.css$/,
           use: ['style-loader', 'css-loader', 'postcss-loader']
+        },
+        // PNG assets: emitted to dist/ and resolved to their URL at runtime.
+        // No npm dep needed — webpack 5 asset modules are built in.
+        {
+          test: /\.png$/,
+          type: 'asset/resource',
         }
       ]
     },
