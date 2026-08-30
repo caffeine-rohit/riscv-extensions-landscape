@@ -49,10 +49,16 @@
        Ctrl/Cmd+K is deliberately NOT handed to kapa - the app already binds it
        to focus the extension search.
 
-       The launcher is resized down from kapa's default: its label ships at
-       18px in a fixed-width button, which clips "Ask AI" and makes the whole
-       control shout over a dense catalogue page. Sizing the label and letting
-       the button size to its content gives a ~62x57 chip instead of 72x80.
+       The stock launcher is hidden (data-button-hide) in favour of the app's
+       own draggable chip, src/AskAiLauncher.jsx, which calls window.Kapa.open()
+       directly. The launcher-button-* sizing attributes were dropped with it:
+       they are only read when kapa paints its own button, so leaving them would
+       invite tuning values nothing reads.
+
+       data-modal-z-index lifts the modal above that chip. kapa's own stylesheet
+       tops out at z-index 1001, and the chip sits at 10000 so it clears the
+       app's 9999 toast - without this the chip would paint over the modal it
+       just opened and swallow clicks in that corner.
 
        The logo is inlined for the same reason as the favicon above: the build
        has no copy plugin, so a file dropped into public/ would 404 in
@@ -72,20 +78,139 @@
     data-project-color="#2C356D"
     data-project-logo="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%22-16%20-16%20109%20109%22%3E%3Crect%20x%3D%22-16%22%20y%3D%22-16%22%20width%3D%22109%22%20height%3D%22109%22%20rx%3D%2224%22%20fill%3D%22%232C356D%22%2F%3E%3Cpath%20d%3D%22M42.853%2023.963c0%2011.134-6.752%2021.253-19.904%2023.623l18.554%2021.928%201.678-2.354%2033.414-47.25V.005H22.273c13.828%201.35%2020.58%2012.818%2020.58%2023.958%22%20fill%3D%22%23F4B01B%22%2F%3E%3Cpath%20d%3D%22M52.292%2073.221l24.631-34.417V76.6h-27.1zM4.728%2037.455h12.818c9.44%200%2014.172-6.74%2014.172-13.492%200-6.758-4.732-13.165-14.172-13.165H0V76.6h32.738L4.728%2042.858v-5.403M189.29%2012.823h11.138v52.309h-11.139v-52.31m77.507%2040.863l-57.933-.033v11.48h58.37c4.383%200%208.107-1.696%2011.139-4.728%203.033-3.03%204.728-6.752%204.728-11.135s-1.695-8.09-4.728-11.14c-3.032-3.032-6.756-4.71-11.139-4.71l-42.462-.318a4.581%204.581%200%2001-4.547-4.547%204.582%204.582%200%20014.577-4.549l58.299-.042v-11.14h-58.373c-4.399%200-8.107%201.696-11.135%204.728-3.032%203.033-4.73%206.757-4.73%2011.14%200%204.381%201.698%208.09%204.73%2011.134%203.028%203.033%206.736%204.382%2011.135%204.382l42.414.002a4.549%204.549%200%20014.55%204.566%204.893%204.893%200%2001-4.895%204.91m47.677-40.862h48.255v11.14h-48.255c-4.037%200-7.416%201.332-10.465%204.382-3.033%203.032-4.381%206.407-4.381%2010.46%200%204.036%201.348%207.415%204.381%2010.464%203.05%203.028%206.428%204.383%2010.465%204.383h48.255l-.003%2011.48h-48.228c-7.085%200-13.176-2.716-18.249-7.774-5.057-5.061-7.416-11.138-7.416-18.224%200-7.082%202.359-13.164%207.416-18.22%205.073-5.387%2011.139-8.091%2018.225-8.091M181.199%2065.132L166.353%2044.54c4.036-.334%207.415-1.683%2010.119-4.716%203.032-3.045%204.727-6.753%204.727-11.134%200-4.383-1.695-8.107-4.727-11.14-3.033-3.032-6.757-4.728-11.14-4.728h-58.374v52.309h11.14V44.54h34.417l14.846%2020.59zM164.665%2033.83l-46.567-.083v-9.439l47.03-.095a4.6%204.6%200%20014.608%204.577%205.062%205.062%200%2001-5.07%205.04%22%20fill%3D%22%23ffffff%22%2F%3E%3Cpath%20d%3D%22M418.399%2065.132l-30.567-52.31h13.084l23.892%2041.503%2023.907-41.502h12.882l-30.381%2052.309m-61.732-31.055h21.93v10.13h-21.93v-10.13%22%20fill%3D%22%23F4B01B%22%2F%3E%3Cpath%20d%3D%22M473.564%2020.822h.88c1.03%200%201.861-.342%201.861-1.174%200-.734-.538-1.224-1.713-1.224-.49%200-.832.049-1.028.098zm-.05%204.553h-1.86v-8.028c.735-.146%201.763-.244%203.085-.244%201.517%200%202.202.244%202.79.587.44.343.782.979.782%201.762%200%20.882-.684%201.567-1.664%201.86v.098c.784.293%201.224.881%201.469%201.958.245%201.224.392%201.714.587%202.007h-2.007c-.244-.293-.39-1.028-.636-1.958-.147-.881-.636-1.273-1.664-1.273h-.881zm-4.943-4.21c0%203.574%202.642%206.413%206.265%206.413%203.525%200%206.119-2.84%206.119-6.363%200-3.574-2.594-6.462-6.167-6.462-3.575%200-6.217%202.888-6.217%206.413zm14.44%200c0%204.553-3.574%208.126-8.223%208.126-4.601%200-8.273-3.573-8.273-8.125%200-4.455%203.672-8.029%208.273-8.029%204.65%200%208.223%203.574%208.223%208.029%22%20fill%3D%22%23ffffff%22%2F%3E%3C%2Fsvg%3E"
     data-color-scheme-selector="[data-theme='dark']"
-    data-launcher-button-image-height="24"
-    data-launcher-button-image-width="24"
-    data-launcher-button-width="auto"
-    data-launcher-button-height="auto"
-    data-launcher-button-padding="9px 12px"
-    data-launcher-button-border-radius="14px"
-    data-launcher-button-label-font-size="12px"
-    data-launcher-button-label-line-height="1.1"
     data-user-analytics-fingerprint-enabled="false"
     data-button-hide="true"
-    data-modal-example-questions="What is the RISC-V ISA Configuration Builder?,How does the Zba address generation extension work?,What extensions are included in the RVA22 profile?,What is the difference between RV32I and RV64I?,What are the rules for canonical -march ordering?"
-    data-modal-example-questions-title="Suggested Questions"
+    data-modal-z-index="10050"
+    data-modal-example-questions="What extensions does RVA23U64 make mandatory that RVA22U64 left optional?,How do SEW and LMUL interact to determine the number of vector elements?,What are the rules for canonical ordering in an -march string?"
     data-modal-example-questions-col-span="12"
   ></script>
+
+  <!-- Rotate the modal's example questions.
+
+       kapa reads data-modal-example-questions once when the widget initialises
+       and splits the value on commas, so a question can never contain one and
+       the set cannot be swapped per modal open. Choosing here rotates them per
+       page load, which is the finest granularity the widget allows. This runs
+       during parsing, long before the async bundle above finishes fetching, so
+       the attribute is always rewritten before kapa reads it. The three
+       questions left on the attribute are the fallback if it somehow is not.
+
+       To add a question: append to POOL and keep it free of commas. -->
+  <script>
+    (function () {
+      var POOL = [
+        "What extensions does RVA23U64 make mandatory that RVA22U64 left optional?",
+        "Which extensions are optional rather than mandatory in RVA23S64?",
+        "How does RVB23 differ from RVA23 in scope and intent?",
+        "What does the Ziccif extension guarantee about instruction fetch atomicity?",
+        "Why does Ziccrse exist and what does it require of main memory?",
+        "What is the difference between Za64rs and Za128rs?",
+        "What does Zama16b guarantee for misaligned accesses?",
+        "Why were profile names such as Ziccamoa introduced for behaviour that already existed?",
+        "What does a profile mandate beyond a base ISA and a list of extensions?",
+        "How do RVA20 and RVA22 differ in what they require of supervisor mode?",
+        "How do SEW and LMUL interact to determine the number of vector elements?",
+        "What does the vtype register encode and which fields does vsetvli set?",
+        "What is the difference between tail-agnostic and tail-undisturbed policy?",
+        "How does mask-agnostic policy differ from mask-undisturbed policy?",
+        "What does VLEN mean and how does it relate to ELEN?",
+        "How does vsetvli compute vl when the requested AVL exceeds VLMAX?",
+        "What are the Zvl extensions and what minimum VLEN does each require?",
+        "How do the Zve embedded vector subsets differ from the full V extension?",
+        "What are vector segment loads and stores used for?",
+        "How do widening vector instructions constrain LMUL and SEW?",
+        "What does Zvfh add over Zvfhmin?",
+        "What is the purpose of the vstart CSR?",
+        "How does vector fixed-point rounding work and where is the mode held?",
+        "What does Zvbb add for vector bit manipulation?",
+        "What instructions does Zba provide for address generation?",
+        "How does Zbb differ from Zbs in intended use?",
+        "Why was Zbc kept separate from the rest of the B extension?",
+        "What does the B extension comprise in its ratified form?",
+        "What does Zbkb add for cryptography beyond Zbb?",
+        "What is the role of Zkr as an entropy source?",
+        "What guarantee does Zkt make about data-independent execution latency?",
+        "How do the Zkn and Zks algorithm suites differ?",
+        "What does Zvkng bundle together?",
+        "Why does scalar cryptography split AES into Zknd and Zkne?",
+        "What is the difference between Zaamo and Zalrsc?",
+        "How does Zabha extend atomic memory operations to byte and halfword widths?",
+        "What does Zacas provide and why do profiles pair it with Ziccamoc?",
+        "How do the aq and rl bits change the ordering of an atomic instruction?",
+        "What is RVWMO and how does it differ from sequential consistency?",
+        "What does Ztso change about the memory model?",
+        "What forward progress is guaranteed for an LR and SC sequence?",
+        "What does Zawrs add and when should software use WRS.NTO?",
+        "Why does reservation set size matter for portable software?",
+        "How does fence.tso differ from a full fence?",
+        "How does Sv39 differ from Sv48 in page table depth and reach?",
+        "What does Svnapot allow an implementation to do?",
+        "What problem does Svinval solve that sfence.vma does not?",
+        "What does Svpbmt add to page table entries?",
+        "How does Svadu change hardware handling of the A and D bits?",
+        "What is the role of the H extension in virtualization?",
+        "What are VS mode and VU mode?",
+        "How does two stage address translation work under the H extension?",
+        "What does Smstateen protect against?",
+        "What is the purpose of Sscofpmf?",
+        "How does Sstc change supervisor timer interrupts?",
+        "What is the difference between Smaia and Ssaia?",
+        "What does Smepmp change about PMP behaviour?",
+        "How are PMP and PMA different concepts?",
+        "What does Zca contain and how does it relate to the C extension?",
+        "Why are Zcf and Zcd not available on RV64?",
+        "What does Zcmp provide for function prologue and epilogue code?",
+        "How do the table jumps in Zcmt reduce code size?",
+        "What instructions does Zcb add?",
+        "Why was the C extension decomposed into the Zc subsets?",
+        "What are the rules for canonical ordering in an -march string?",
+        "Why should an -march string avoid the g shorthand?",
+        "How is the 32 bit opcode map allocated across major opcodes?",
+        "Which encodings are reserved for custom extensions?",
+        "How does riscv-opcodes describe an instruction encoding?",
+        "What is the unified database and what does it standardize?",
+        "How do the match and mask values work when decoding an instruction?",
+        "What does the MOP family of instructions reserve encoding space for?",
+        "How are 48 bit and 64 bit instruction encodings identified?",
+        "What does Zimop provide and why would a profile require it?",
+        "What is the difference between Zfinx and the F extension?",
+        "What does Zfa add to the base floating point extensions?",
+        "How does Zfh differ from Zfhmin?",
+        "Which rounding modes does the fcsr support?",
+        "What does Zfbfmin add for BF16 arithmetic?",
+        "How is NaN boxing defined for narrow floats held in wider registers?",
+        "Why does RISC-V not take floating point traps by default?",
+        "What does the Q extension require of an implementation?",
+        "What does Zicntr provide and which counters does it define?",
+        "How does Zihpm extend performance monitoring?",
+        "What is the role of Sdext in external debug?",
+        "What does Sdtrig define for hardware triggers?",
+        "How do control transfer records work in Smctr and Ssctr?",
+        "What does the debug module expose to an external debugger?",
+        "How does counter delegation work under Smcdeleg?",
+        "What is the purpose of mcountinhibit?",
+        "What does Zicfilp protect against?",
+        "How do shadow stacks work in Zicfiss?",
+        "What threat model motivates landing pad instructions?",
+        "What does Zjpm define for pointer masking?",
+        "Which phases does a RISC-V specification pass through before ratification?",
+        "What is the difference between a frozen and a ratified specification?",
+        "What does the fast track process allow for small extensions?",
+        "Who reviews an architecture proposal before a specification can freeze?",
+        "How are extension version numbers assigned?",
+        "What is the difference between a task group and a special interest group?"
+      ];
+      var SHOWN = 3;
+      var el = document.querySelector('script[data-website-id]');
+      if (!el || POOL.length < SHOWN) return;
+      var rest = POOL.slice();
+      var picked = [];
+      while (picked.length < SHOWN && rest.length) {
+        picked.push(rest.splice(Math.floor(Math.random() * rest.length), 1)[0]);
+      }
+      el.setAttribute('data-modal-example-questions', picked.join(','));
+    })();
+  </script>
 </head>
 <body>
   <div id="root"></div>
