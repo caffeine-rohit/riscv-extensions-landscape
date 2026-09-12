@@ -4,7 +4,7 @@
   "sources": {
     "udb": {
       "repo": "riscv/riscv-unified-db",
-      "commit": "79fd00056af364bb16cdc23e2ebad68fcfadebd1",
+      "commit": "ef208d765a4061d7e172ad412c8e1036d2e5ce22",
       "branch": "main",
       "path": "spec/std/isa/ext"
     },
@@ -973,8 +973,13 @@
       "verified": "udb"
     },
     "Zbc": {
-      "requires": [],
-      "verified": "udb"
+      "requires": [
+        {
+          "ext": "Zbkc",
+          "src": "udb",
+          "ref": "Zbc.yaml requirements.extension"
+        }
+      ]
     },
     "Zbkb": {
       "requires": [],
