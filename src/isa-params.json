@@ -4,7 +4,7 @@
   "sources": {
     "udb": {
       "repo": "riscv/riscv-unified-db",
-      "commit": "79fd00056af364bb16cdc23e2ebad68fcfadebd1",
+      "commit": "50fe9a9e9708b4f1cdb287e3e04c75406a016c4e",
       "branch": "main",
       "path": "spec/std/isa/param"
     }
@@ -1430,6 +1430,27 @@
       },
       "src": "MCTRCTL_TRETINH_IMPLEMENTED.yaml"
     },
+    "MEI_INTR_IMPL": {
+      "name": "MEI_INTR_IMPL",
+      "long_name": "Machine-level external interrupts are implemented",
+      "description": "Whether or not machine-level external interrupts are implemented. Possible values: true:: Machine-level external interrupts are implemented. `mie.MEIE` and `mideleg.MEI` are writable. false:: Machine-level external interrupts are not implemented. `mie.MEIE` and `mideleg.MEI` are read-only zero.",
+      "schema": {
+        "type": "boolean"
+      },
+      "definedBy": {
+        "extension": {
+          "allOf": [
+            {
+              "name": "Zicsr"
+            },
+            {
+              "name": "Sm"
+            }
+          ]
+        }
+      },
+      "src": "MEI_INTR_IMPL.yaml"
+    },
     "MIMPID_IMPLEMENTED": {
       "name": "MIMPID_IMPLEMENTED",
       "long_name": "Whether or not the `mimpid` CSR is implemented.",
@@ -1580,6 +1601,27 @@
         }
       },
       "src": "MISA_CSR_IMPLEMENTED.yaml"
+    },
+    "MSI_INTR_IMPL": {
+      "name": "MSI_INTR_IMPL",
+      "long_name": "Machine-level software interrupts are implemented",
+      "description": "Whether or not machine-level software interrupts are implemented. Possible values: true:: Machine-level software interrupts are implemented. `mie.MSIE` and `mideleg.MSI` are writable. false:: Machine-level software interrupts are not implemented. `mie.MSIE` and `mideleg.MSI` are read-only zero.",
+      "schema": {
+        "type": "boolean"
+      },
+      "definedBy": {
+        "extension": {
+          "allOf": [
+            {
+              "name": "Zicsr"
+            },
+            {
+              "name": "Sm"
+            }
+          ]
+        }
+      },
+      "src": "MSI_INTR_IMPL.yaml"
     },
     "MSTATEEN_AIA_TYPE": {
       "name": "MSTATEEN_AIA_TYPE",
@@ -1828,6 +1870,27 @@
         "reason": "If V is supported, both Off (0) and Dirty (3) must be supported\n\nIf there is a hardware update to mstatus.VS, then the Dirty state must be supported\n"
       },
       "src": "MSTATUS_VS_LEGAL_VALUES.yaml"
+    },
+    "MTI_INTR_IMPL": {
+      "name": "MTI_INTR_IMPL",
+      "long_name": "Machine-level timer interrupts are implemented",
+      "description": "Whether or not machine-level timer interrupts are implemented. Possible values: true:: Machine-level timer interrupts are implemented. `mie.MTIE`, `mideleg.MTI`, and `mtimecmp` are writable. false:: Machine-level timer interrupts are not implemented. `mie.MTIE` and `mideleg.MTI` are read-only zero. `mtimecmp` is optional and may be read-only zero.",
+      "schema": {
+        "type": "boolean"
+      },
+      "definedBy": {
+        "extension": {
+          "allOf": [
+            {
+              "name": "Zicsr"
+            },
+            {
+              "name": "Sm"
+            }
+          ]
+        }
+      },
+      "src": "MTI_INTR_IMPL.yaml"
     },
     "MTVAL_WIDTH": {
       "name": "MTVAL_WIDTH",
@@ -2428,13 +2491,27 @@
       },
       "src": "M_MODE_ENDIANNESS.yaml"
     },
+    "NON_STANDARD_EXTENSION_IMPLEMENTED": {
+      "name": "NON_STANDARD_EXTENSION_IMPLEMENTED",
+      "long_name": "Non-standard extensions implemented",
+      "description": "If any non-standard extensions are implemented, this parameter must be true. This parameter is used as the reset value for `misa.X`.",
+      "schema": {
+        "type": "boolean"
+      },
+      "definedBy": {
+        "extension": {
+          "name": "Sm"
+        }
+      },
+      "src": "NON_STANDARD_EXTENSION_IMPLEMENTED.yaml"
+    },
     "NUM_EXTERNAL_GUEST_INTERRUPTS": {
       "name": "NUM_EXTERNAL_GUEST_INTERRUPTS",
       "long_name": null,
       "description": "Number of supported virtualized guest interrupts Corresponds to the `GEILEN` parameter in the RVI specs",
       "schema": {
         "type": "integer",
-        "minimum": 1,
+        "minimum": 0,
         "maximum": 63
       },
       "definedBy": {
@@ -2522,30 +2599,6 @@
         }
       },
       "src": "PMA_GRANULARITY.yaml"
-    },
-    "PMLEN": {
-      "name": "PMLEN",
-      "long_name": null,
-      "description": "The number of high-order bits of an address that are masked by the pointer masking facility.",
-      "schema": {
-        "type": "integer"
-      },
-      "definedBy": {
-        "extension": {
-          "anyOf": [
-            {
-              "name": "Smmpm"
-            },
-            {
-              "name": "Smnpm"
-            },
-            {
-              "name": "Ssnpm"
-            }
-          ]
-        }
-      },
-      "src": "PMLEN.yaml"
     },
     "PMP_GRANULARITY": {
       "name": "PMP_GRANULARITY",
@@ -2647,7 +2700,7 @@
     "REPORT_CAUSE_IN_MTVAL_ON_LANDING_PAD_SOFTWARE_CHECK": {
       "name": "REPORT_CAUSE_IN_MTVAL_ON_LANDING_PAD_SOFTWARE_CHECK",
       "long_name": null,
-      "description": "When true, `mtval` is written with the shadow stack cause (code=18) when a SoftwareCheck exception is raised into M-mode due to a landing pad error. When false, `mtval` is written with 0.",
+      "description": "When true, `mtval` is written with the landing pad fault cause (code=2) when a SoftwareCheck exception is raised into M-mode due to a landing pad error. When false, `mtval` is written with 0.",
       "schema": {
         "type": "boolean"
       },
@@ -3395,6 +3448,27 @@
       },
       "src": "SCTRDEPTH_DEPTH_LEGAL_VALUES.yaml"
     },
+    "SEI_INTR_IMPL": {
+      "name": "SEI_INTR_IMPL",
+      "long_name": "Supervisor-level external interrupts are implemented",
+      "description": "Whether or not supervisor-level external interrupts are implemented. Possible values: true:: Supervisor-level external interrupts are implemented. `mie.SEIE` and `mideleg.SEI` are writable. false:: Supervisor-level external interrupts are not implemented. `mie.SEIE`, `mip.SEIP`, and `mideleg.SEI` are read-only zero.",
+      "schema": {
+        "type": "boolean"
+      },
+      "definedBy": {
+        "extension": {
+          "allOf": [
+            {
+              "name": "Zicsr"
+            },
+            {
+              "name": "S"
+            }
+          ]
+        }
+      },
+      "src": "SEI_INTR_IMPL.yaml"
+    },
     "SEW_MIN": {
       "name": "SEW_MIN",
       "long_name": null,
@@ -3415,6 +3489,27 @@
         }
       },
       "src": "SEW_MIN.yaml"
+    },
+    "SSI_INTR_IMPL": {
+      "name": "SSI_INTR_IMPL",
+      "long_name": "Supervisor-level software interrupts are implemented",
+      "description": "Whether or not supervisor-level software interrupts are implemented. Possible values: true:: Supervisor-level software interrupts are implemented. `mie.SSIE` and `mideleg.SSI` are writable. false:: Supervisor-level software interrupts are not implemented. `mie.SSIE`, `mip.SSIP`, and `mideleg.SSI` are read-only zero.",
+      "schema": {
+        "type": "boolean"
+      },
+      "definedBy": {
+        "extension": {
+          "allOf": [
+            {
+              "name": "Zicsr"
+            },
+            {
+              "name": "S"
+            }
+          ]
+        }
+      },
+      "src": "SSI_INTR_IMPL.yaml"
     },
     "SSTATEEN_JVT_TYPE": {
       "name": "SSTATEEN_JVT_TYPE",
@@ -3445,6 +3540,31 @@
         "reason": "SSTATEEN cannot have more options that MSTATEEN\n\nSSTATEEN cannot have more options that HSTATEEN\n"
       },
       "src": "SSTATEEN_JVT_TYPE.yaml"
+    },
+    "STI_INTR_IMPL": {
+      "name": "STI_INTR_IMPL",
+      "long_name": "Supervisor-level timer interrupts are implemented",
+      "description": "Whether or not supervisor-level timer interrupts are implemented. If Sstc is implemented, then STI_INTR_IMPL must be true. Possible values: true:: Supervisor-level timer interrupts are implemented. `mie.STIE` and `mideleg.STI` are writable. false:: Supervisor-level timer interrupts are not implemented. `mie.STIE`, `mip.STIP`, and `mideleg.STI` are read-only zero.",
+      "schema": {
+        "type": "boolean"
+      },
+      "definedBy": {
+        "extension": {
+          "allOf": [
+            {
+              "name": "Zicsr"
+            },
+            {
+              "name": "S"
+            }
+          ]
+        }
+      },
+      "requirements": {
+        "idl()": "implemented?(ExtensionName::Sstc) -> STI_INTR_IMPL;\n",
+        "reason": "When the Sstc extension is implemented, STIP reflects the timer interrupt signal resulting from `stimecmp`."
+      },
+      "src": "STI_INTR_IMPL.yaml"
     },
     "STVAL_WIDTH": {
       "name": "STVAL_WIDTH",
@@ -3589,6 +3709,90 @@
         }
       },
       "src": "STVEC_MODES.yaml"
+    },
+    "SUPPORTED_PMLEN_SMMPM": {
+      "name": "SUPPORTED_PMLEN_SMMPM",
+      "long_name": "Pointer mask length for M mode",
+      "description": "The `PMLEN` values supported by the `Smmpm` pointer masking facility for M-mode, selected via the `PMM` field in `mseccfg`. `PMLEN` is the number of high-order bits of an address that are masked. Options: 0:: PMLEN=0 (pointer masking is disabled) 7:: PMLEN=XLEN-57 (i.e., PMLEN=7 on RV64) 16:: PMLEN=XLEN-48 (i.e., PMLEN=16 on RV64) The current standard only supports these values (`zpm.adoc`, tag `norm:pmlen_supported_values`). `PMM`=00 (pointer masking disabled, PMLEN=0) is mandatory and always available, so it is mandatory here.",
+      "schema": {
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "enum": [
+            0,
+            7,
+            16
+          ]
+        },
+        "contains": {
+          "const": 0
+        },
+        "minItems": 1,
+        "maxItems": 3,
+        "uniqueItems": true
+      },
+      "definedBy": {
+        "extension": {
+          "name": "Smmpm"
+        }
+      },
+      "src": "SUPPORTED_PMLEN_SMMPM.yaml"
+    },
+    "SUPPORTED_PMLEN_SMNPM": {
+      "name": "SUPPORTED_PMLEN_SMNPM",
+      "long_name": "Pointer mask length for next mode below M mode",
+      "description": "The `PMLEN` values supported by the `Smnpm` pointer masking facility for the next privilege mode below M-mode (S/HS if S-mode is implemented, or U-mode otherwise), selected via the `PMM` field in `menvcfg`. `PMLEN` is the number of high-order bits of an address that are masked. Options: 0:: PMLEN=0 (pointer masking is disabled) 7:: PMLEN=XLEN-57 (i.e., PMLEN=7 on RV64) 16:: PMLEN=XLEN-48 (i.e., PMLEN=16 on RV64) The current standard only supports these values (`zpm.adoc`, tag `norm:pmlen_supported_values`). `PMM`=00 (pointer masking disabled, PMLEN=0) is mandatory and always available, so it is mandatory here.",
+      "schema": {
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "enum": [
+            0,
+            7,
+            16
+          ]
+        },
+        "contains": {
+          "const": 0
+        },
+        "minItems": 1,
+        "maxItems": 3,
+        "uniqueItems": true
+      },
+      "definedBy": {
+        "extension": {
+          "name": "Smnpm"
+        }
+      },
+      "src": "SUPPORTED_PMLEN_SMNPM.yaml"
+    },
+    "SUPPORTED_PMLEN_SSNPM": {
+      "name": "SUPPORTED_PMLEN_SSNPM",
+      "long_name": "Pointer mask length for next mode below S-mode",
+      "description": "The `PMLEN` values supported by the `Ssnpm` pointer masking facility for the next privilege mode below S-mode (U-mode, and VS-/VU-modes if the H extension is present), selected via the `PMM` field in `senvcfg`. `PMLEN` is the number of high-order bits of an address that are masked. Options: 0:: PMLEN=0 (pointer masking is disabled) 7:: PMLEN=XLEN-57 (i.e., PMLEN=7 on RV64) 16:: PMLEN=XLEN-48 (i.e., PMLEN=16 on RV64) The current standard only supports these values (`zpm.adoc`, tag `norm:pmlen_supported_values`). `PMM`=00 (pointer masking disabled, PMLEN=0) is mandatory and always available, so it is mandatory here.",
+      "schema": {
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "enum": [
+            0,
+            7,
+            16
+          ]
+        },
+        "contains": {
+          "const": 0
+        },
+        "minItems": 1,
+        "maxItems": 3,
+        "uniqueItems": true
+      },
+      "definedBy": {
+        "extension": {
+          "name": "Ssnpm"
+        }
+      },
+      "src": "SUPPORTED_PMLEN_SSNPM.yaml"
     },
     "SUPPORT_FRACTIONAL_LMUL_BEYOND_REQUIRED": {
       "name": "SUPPORT_FRACTIONAL_LMUL_BEYOND_REQUIRED",
@@ -4711,6 +4915,48 @@
       },
       "src": "VMID_WIDTH.yaml"
     },
+    "VSEI_INTR_IMPL": {
+      "name": "VSEI_INTR_IMPL",
+      "long_name": "Virtual supervisor-level external interrupts are implemented",
+      "description": "Whether or not virtual supervisor-level external interrupts are implemented. Possible values: true:: Virtual supervisor-level external interrupts are implemented. `mie.VSEIE` and `mideleg.VSEI` are writable. false:: Virtual supervisor-level external interrupts are not implemented. `mie.VSEIE`, `mip.VSEIP`, and `mideleg.VSEI` are read-only zero.",
+      "schema": {
+        "type": "boolean"
+      },
+      "definedBy": {
+        "extension": {
+          "allOf": [
+            {
+              "name": "Zicsr"
+            },
+            {
+              "name": "H"
+            }
+          ]
+        }
+      },
+      "src": "VSEI_INTR_IMPL.yaml"
+    },
+    "VSSI_INTR_IMPL": {
+      "name": "VSSI_INTR_IMPL",
+      "long_name": "Virtual supervisor-level software interrupts are implemented",
+      "description": "Whether or not virtual supervisor-level software interrupts are implemented. Possible values: true:: Virtual supervisor-level software interrupts are implemented. `mie.VSSIE` and `mideleg.VSSI` are writable. false:: Virtual supervisor-level software interrupts are not implemented. `mie.VSSIE`, `mip.VSSIP`, and `mideleg.VSSI` are read-only zero.",
+      "schema": {
+        "type": "boolean"
+      },
+      "definedBy": {
+        "extension": {
+          "allOf": [
+            {
+              "name": "Zicsr"
+            },
+            {
+              "name": "H"
+            }
+          ]
+        }
+      },
+      "src": "VSSI_INTR_IMPL.yaml"
+    },
     "VSSTAGE_MODE_BARE": {
       "name": "VSSTAGE_MODE_BARE",
       "long_name": null,
@@ -4741,6 +4987,31 @@
         }
       },
       "src": "VSSTATUS_VS_EXISTS.yaml"
+    },
+    "VSTI_INTR_IMPL": {
+      "name": "VSTI_INTR_IMPL",
+      "long_name": "Virtual supervisor-level timer interrupts are implemented.",
+      "description": "Whether or not virtual supervisor-level timer interrupts are implemented. If Sstc is implemented, then VSTI_INTR_IMPL must be true. Possible values: true:: Virtual supervisor-level timer interrupts are implemented. `mie.VSTIE` and `mdeleg.VSTI` are writable. false:: Virtual supervisor-level timer interrupts are not implemented. `mie.VSTIE`, `mip.VSTIP`, and and `mdeleg.VSTI` are read-only zero.",
+      "schema": {
+        "type": "boolean"
+      },
+      "definedBy": {
+        "extension": {
+          "allOf": [
+            {
+              "name": "Zicsr"
+            },
+            {
+              "name": "H"
+            }
+          ]
+        }
+      },
+      "requirements": {
+        "idl()": "implemented?(ExtensionName::Sstc) -> VSTI_INTR_IMPL;\n",
+        "reason": "When the Sstc extension is implemented, VSTIP reflects the timer interrupt signal resulting from `vstimecmp`."
+      },
+      "src": "VSTI_INTR_IMPL.yaml"
     },
     "VSTVEC_MODES": {
       "name": "VSTVEC_MODES",
@@ -4857,6 +5128,34 @@
         }
       },
       "src": "VU_MODE_ENDIANNESS.yaml"
+    },
+    "WFI_FINITE": {
+      "name": "WFI_FINITE",
+      "long_name": "Whether WFI resumes execution after a finite amount of time",
+      "description": "Options: * true: WFI resumes execution after waiting for a finite amount of time * false: WFI may continue waiting until another event causes execution to resume",
+      "schema": {
+        "type": "boolean"
+      },
+      "definedBy": {
+        "extension": {
+          "name": "Sm"
+        }
+      },
+      "src": "WFI_FINITE.yaml"
+    },
+    "WFI_U_MODE": {
+      "name": "WFI_U_MODE",
+      "long_name": "Whether WFI is supported in U mode",
+      "description": "Options: * true: WFI can be executed in U mode * false: Executing WFI in U mode raises an illegal instruction exception",
+      "schema": {
+        "type": "boolean"
+      },
+      "definedBy": {
+        "extension": {
+          "name": "Sm"
+        }
+      },
+      "src": "WFI_U_MODE.yaml"
     },
     "ZAWRS_NTO_IS_NOP": {
       "name": "ZAWRS_NTO_IS_NOP",
